@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secret Vault</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-10px); }
+      40%, 80% { transform: translateX(10px); }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.2); }
+      50% { box-shadow: 0 0 50px rgba(16, 185, 129, 0.5); }
+    }
+    @keyframes dotBounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-6px); }
+    }
+    @keyframes lockPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    .animate-fade-in-up { animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+    .animate-shake { animation: shake 0.4s ease-in-out; }
+    .animate-pulse-glow { animation: pulseGlow 2.5s ease-in-out infinite; }
+    .animate-lock-pulse { animation: lockPulse 2s ease-in-out infinite; }
+    .dot-1 { animation: dotBounce 1.4s infinite 0s; }
+    .dot-2 { animation: dotBounce 1.4s infinite 0.2s; }
+    .dot-3 { animation: dotBounce 1.4s infinite 0.4s; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    // ========================================
+    // 🔧 Configuration
+    // ========================================
+    const API_BASE_URL = "/api";
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Card({ children, className = "" }) {
+      return (
+        <div className={`bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Button({ children, onClick, disabled = false, variant = "primary", className = "" }) {
+      const base = "font-semibold rounded-2xl transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer";
+      const variants = {
+        primary: "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white px-6 py-3.5 hover:shadow-lg hover:shadow-emerald-500/25 active:scale-95",
+        ghost: "bg-white/5 hover:bg-white/10 text-white/60 hover:text-white/80 px-5 py-2.5 text-sm border border-white/10",
+      };
+      return (
+        <button onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function PinDots({ length, max = 4 }) {
+      return (
+        <div className="flex gap-3 justify-center my-6">
+          {Array.from({ length: max }).map((_, i) => (
+            <div
+              key={i}
+              className={`w-3.5 h-3.5 rounded-full transition-all duration-300 ${
+                i < length
+                  ? "bg-emerald-400 shadow-lg shadow-emerald-400/50 scale-110"
+                  : "bg-white/15 border border-white/20"
+              }`}
+            />
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Page Components
+    // ========================================
+    function PasswordForm({ onSubmit, error, shaking, attempts, loading }) {
+      const [password, setPassword] = useState("");
+      const inputRef = useRef(null);
+
+      useEffect(() => {
+        inputRef.current?.focus();
+      }, []);
+
+      const handleKeyDown = (e) => {
+        if (e.key === "Enter" && password.trim()) onSubmit(password);
+      };
+
+      const handleSubmit = () => {
+        if (password.trim()) onSubmit(password);
+      };
+
+      return (
+        <div className="space-y-5">
+          <PinDots length={password.length} max={4} />
+
+          <div className={shaking ? "animate-shake" : ""}>
+            <input
+              ref={inputRef}
+              type="password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); }}
+              onKeyDown={handleKeyDown}
+              maxLength={10}
+              placeholder="Enter password"
+              className="w-full px-5 py-4 bg-white/5 border border-white/15 rounded-2xl text-white text-center text-lg tracking-[0.3em] placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+              aria-label="Password input"
+            />
+          </div>
+
+          {error && (
+            <div className="animate-fade-in-up">
+              <p className="text-red-400 text-sm text-center flex items-center justify-center gap-2" role="alert">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {error}
+              </p>
+            </div>
+          )}
+
+          {attempts > 2 && (
+            <p className="text-amber-400/60 text-xs text-center">
+              Hint: check secret.txt
+            </p>
+          )}
+
+          <Button onClick={handleSubmit} disabled={!password.trim() || loading} className="w-full">
+            {loading ? (
+              <span className="flex items-center justify-center gap-1">
+                <span className="w-1.5 h-1.5 bg-white rounded-full dot-1"></span>
+                <span className="w-1.5 h-1.5 bg-white rounded-full dot-2"></span>
+                <span className="w-1.5 h-1.5 bg-white rounded-full dot-3"></span>
+              </span>
+            ) : "Unlock"}
+          </Button>
+
+          {attempts > 0 && (
+            <p className="text-white/20 text-xs text-center">{attempts} attempt{attempts > 1 ? "s" : ""}</p>
+          )}
+        </div>
+      );
+    }
+
+    function SecretReveal({ message, onReset }) {
+      return (
+        <div className="animate-fade-in-up space-y-6">
+          <div className="text-center">
+            <span className="text-6xl block mb-4">🎉</span>
+            <h2 className="text-2xl font-bold text-emerald-400 mb-1">Access Granted</h2>
+            <p className="text-white/40 text-sm">The vault has been opened</p>
+          </div>
+
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-6 animate-pulse-glow">
+            <p className="text-white/90 whitespace-pre-line leading-relaxed text-center text-lg">
+              {message}
+            </p>
+          </div>
+
+          <div className="text-center">
+            <Button variant="ghost" onClick={onReset}>Lock again</Button>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App Component
+    // ========================================
+    function App() {
+      const [unlocked, setUnlocked] = useState(false);
+      const [secretMessage, setSecretMessage] = useState("");
+      const [error, setError] = useState("");
+      const [shaking, setShaking] = useState(false);
+      const [attempts, setAttempts] = useState(0);
+      const [loading, setLoading] = useState(false);
+
+      const handleSubmit = async (password) => {
+        if (loading) return;
+        setLoading(true);
+        setError("");
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/check-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password }),
+          });
+          const data = await res.json();
+
+          if (data.success) {
+            setUnlocked(true);
+            setSecretMessage(data.message);
+          } else {
+            setAttempts((prev) => prev + 1);
+            setError(data.message);
+            setShaking(true);
+            setTimeout(() => setShaking(false), 400);
+          }
+        } catch {
+          setError("Cannot connect to server.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handleReset = () => {
+        setUnlocked(false);
+        setSecretMessage("");
+        setError("");
+        setAttempts(0);
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/20 via-transparent to-transparent"></div>
+
+          <Card className="relative w-full max-w-sm p-8">
+            {/* Header */}
+            <div className="text-center mb-6">
+              <span className={`text-5xl block mb-3 ${unlocked ? "" : "animate-lock-pulse"}`}>
+                {unlocked ? "🔓" : "🔐"}
+              </span>
+              <h1 className="text-2xl font-bold text-white tracking-tight">Secret Vault</h1>
+              <p className="text-white/30 text-sm mt-1">Enter the password to unlock</p>
+            </div>
+
+            {unlocked ? (
+              <SecretReveal message={secretMessage} onReset={handleReset} />
+            ) : (
+              <PasswordForm
+                onSubmit={handleSubmit}
+                error={error}
+                shaking={shaking}
+                attempts={attempts}
+                loading={loading}
+              />
+            )}
+          </Card>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

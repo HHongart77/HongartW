@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML Tags - Apple Keynote Style</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0a; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+    /* Slide transitions */
+    .slide-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transform: translateY(40px) scale(0.97);
+      transition: opacity 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                  transform 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      pointer-events: none;
+    }
+    .slide.active {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    /* Code badge glow */
+    .code-badge {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      text-shadow: 0 0 30px rgba(120, 120, 255, 0.5), 0 0 60px rgba(120, 120, 255, 0.2);
+    }
+
+    /* Progress bar */
+    .progress-bar {
+      transition: width 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    /* Gradient text */
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Dot indicator */
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      transition: all 0.4s ease;
+    }
+    .dot.active {
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+      width: 24px;
+      border-radius: 4px;
+    }
+
+    /* Live example area */
+    .example-area {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 32px;
+      backdrop-filter: blur(10px);
+    }
+
+    /* Subtle gradient bg per slide */
+    .slide-bg-1 { background: radial-gradient(ellipse at 50% 30%, rgba(99, 102, 241, 0.08) 0%, transparent 70%); }
+    .slide-bg-2 { background: radial-gradient(ellipse at 50% 30%, rgba(168, 85, 247, 0.08) 0%, transparent 70%); }
+    .slide-bg-3 { background: radial-gradient(ellipse at 50% 30%, rgba(236, 72, 153, 0.08) 0%, transparent 70%); }
+    .slide-bg-4 { background: radial-gradient(ellipse at 50% 30%, rgba(34, 211, 238, 0.08) 0%, transparent 70%); }
+    .slide-bg-5 { background: radial-gradient(ellipse at 50% 30%, rgba(52, 211, 153, 0.08) 0%, transparent 70%); }
+
+    /* Button demo interaction */
+    .demo-btn {
+      transition: all 0.2s ease;
+    }
+    .demo-btn:hover {
+      transform: scale(1.05);
+    }
+    .demo-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Nav hint fade */
+    .nav-hint {
+      animation: hintPulse 3s ease-in-out infinite;
+    }
+    @keyframes hintPulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.6; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ========================================
+    // Slide Data
+    // ========================================
+
+    const SLIDES = [
+      {
+        tag: "<h1>",
+        title: "Heading",
+        description: "제목을 표시하는 태그",
+        detail: "웹 페이지에서 가장 중요한 제목을 정의합니다. SEO와 접근성에 핵심적인 역할을 합니다.",
+        bgClass: "slide-bg-1",
+        accentColor: "#6366f1",
+      },
+      {
+        tag: "<p>",
+        title: "Paragraph",
+        description: "문단을 구성하는 태그",
+        detail: "텍스트 블록을 하나의 문단으로 묶어 표현합니다. 가장 기본적인 텍스트 요소입니다.",
+        bgClass: "slide-bg-2",
+        accentColor: "#a855f7",
+      },
+      {
+        tag: "<button>",
+        title: "Button",
+        description: "클릭 가능한 버튼 태그",
+        detail: "사용자와 상호작용하는 클릭 가능한 요소를 만듭니다. 폼 제출, 동작 실행 등에 사용됩니다.",
+        bgClass: "slide-bg-3",
+        accentColor: "#ec4899",
+      },
+      {
+        tag: "<img>",
+        title: "Image",
+        description: "이미지를 삽입하는 태그",
+        detail: "웹 페이지에 이미지를 표시합니다. src 속성으로 경로를, alt 속성으로 대체 텍스트를 지정합니다.",
+        bgClass: "slide-bg-4",
+        accentColor: "#22d3ee",
+      },
+      {
+        tag: "<ul> / <li>",
+        title: "List",
+        description: "목록을 만드는 태그",
+        detail: "ul은 순서 없는 목록을, li는 각 항목을 정의합니다. 내비게이션, 메뉴 등에 폭넓게 활용됩니다.",
+        bgClass: "slide-bg-5",
+        accentColor: "#34d399",
+      },
+    ];
+
+    // ========================================
+    // Live Example Components
+    // ========================================
+
+    function HeadingExample() {
+      return (
+        <div className="example-area text-center" style={{ minWidth: 320 }}>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginBottom: 12, letterSpacing: 2, textTransform: "uppercase" }}>Live Example</p>
+          <h1 style={{ fontSize: "2.2rem", fontWeight: 800, lineHeight: 1.2 }}>
+            <span className="gradient-text">Hello, World!</span>
+          </h1>
+          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, marginTop: 12, fontFamily: "'SF Mono', monospace" }}>
+            {'<h1>Hello, World!</h1>'}
+          </p>
+        </div>
+      );
+    }
+
+    function ParagraphExample() {
+      return (
+        <div className="example-area" style={{ maxWidth: 500 }}>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginBottom: 12, letterSpacing: 2, textTransform: "uppercase" }}>Live Example</p>
+          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: "1.1rem", lineHeight: 1.8 }}>
+            웹은 <span style={{ color: "#a855f7", fontWeight: 600 }}>정보를 공유</span>하기 위해 탄생했습니다.
+            문단 태그는 그 정보를 <span style={{ color: "#a855f7", fontWeight: 600 }}>읽기 쉽게</span> 구조화하는 가장 기본적인 도구입니다.
+          </p>
+          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, marginTop: 12, fontFamily: "'SF Mono', monospace" }}>
+            {'<p>텍스트 내용...</p>'}
+          </p>
+        </div>
+      );
+    }
+
+    function ButtonExample() {
+      const [count, setCount] = useState(0);
+      return (
+        <div className="example-area text-center" style={{ minWidth: 320 }}>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginBottom: 16, letterSpacing: 2, textTransform: "uppercase" }}>Live Example</p>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <button
+              className="demo-btn"
+              onClick={() => setCount(c => c + 1)}
+              style={{
+                background: "linear-gradient(135deg, #ec4899, #8b5cf6)",
+                color: "white",
+                border: "none",
+                padding: "12px 28px",
+                borderRadius: 12,
+                fontSize: 16,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Click me ({count})
+            </button>
+            <button
+              className="demo-btn"
+              style={{
+                background: "transparent",
+                color: "rgba(255,255,255,0.7)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                padding: "12px 28px",
+                borderRadius: 12,
+                fontSize: 16,
+                fontWeight: 500,
+                cursor: "pointer",
+              }}
+            >
+              Secondary
+            </button>
+          </div>
+          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, marginTop: 16, fontFamily: "'SF Mono', monospace" }}>
+            {'<button>Click me</button>'}
+          </p>
+        </div>
+      );
+    }
+
+    function ImageExample() {
+      return (
+        <div className="example-area text-center" style={{ minWidth: 320 }}>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginBottom: 16, letterSpacing: 2, textTransform: "uppercase" }}>Live Example</p>
+          <div style={{ display: "flex", gap: 16, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
+            <img
+              src="https://picsum.photos/seed/apple-keynote/200/140"
+              alt="Sample landscape"
+              style={{ borderRadius: 12, border: "2px solid rgba(255,255,255,0.1)" }}
+              width="200"
+              height="140"
+            />
+            <img
+              src="https://picsum.photos/seed/react-demo/100/100"
+              alt="Sample avatar"
+              style={{ borderRadius: "50%", border: "3px solid rgba(34,211,238,0.4)" }}
+              width="100"
+              height="100"
+            />
+          </div>
+          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, marginTop: 16, fontFamily: "'SF Mono', monospace" }}>
+            {'<img src="..." alt="..." />'}
+          </p>
+        </div>
+      );
+    }
+
+    function ListExample() {
+      const items = ["HTML", "CSS", "JavaScript", "React"];
+      return (
+        <div className="example-area" style={{ minWidth: 280 }}>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginBottom: 16, letterSpacing: 2, textTransform: "uppercase" }}>Live Example</p>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {items.map((item, i) => (
+              <li key={i} style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 16px",
+                marginBottom: 6,
+                borderRadius: 10,
+                background: "rgba(52, 211, 153, 0.06)",
+                border: "1px solid rgba(52, 211, 153, 0.1)",
+                color: "rgba(255,255,255,0.8)",
+                fontSize: 16,
+              }}>
+                <span style={{ color: "#34d399", fontWeight: 700, fontFamily: "'SF Mono', monospace", fontSize: 13 }}>
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                {item}
+              </li>
+            ))}
+          </ul>
+          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, marginTop: 16, fontFamily: "'SF Mono', monospace" }}>
+            {'<ul><li>...</li></ul>'}
+          </p>
+        </div>
+      );
+    }
+
+    const EXAMPLES = [HeadingExample, ParagraphExample, ButtonExample, ImageExample, ListExample];
+
+    // ========================================
+    // App Component
+    // ========================================
+
+    function App() {
+      const [current, setCurrent] = useState(0);
+      const total = SLIDES.length;
+
+      const goNext = useCallback(() => {
+        setCurrent(c => Math.min(c + 1, total - 1));
+      }, [total]);
+
+      const goPrev = useCallback(() => {
+        setCurrent(c => Math.max(c - 1, 0));
+      }, []);
+
+      useEffect(() => {
+        const handleKey = (e) => {
+          if (e.key === "ArrowRight" || e.key === " ") {
+            e.preventDefault();
+            goNext();
+          } else if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            goPrev();
+          }
+        };
+        window.addEventListener("keydown", handleKey);
+        return () => window.removeEventListener("keydown", handleKey);
+      }, [goNext, goPrev]);
+
+      return (
+        <div style={{ width: "100vw", height: "100vh", background: "#0a0a0a", position: "relative", overflow: "hidden" }}>
+
+          {/* Slides */}
+          <div className="slide-container">
+            {SLIDES.map((slide, i) => {
+              const ExampleComponent = EXAMPLES[i];
+              return (
+                <div key={i} className={`slide ${slide.bgClass} ${i === current ? "active" : ""}`}>
+                  {/* Slide number */}
+                  <div style={{
+                    position: "absolute",
+                    top: 32,
+                    right: 40,
+                    color: "rgba(255,255,255,0.2)",
+                    fontSize: 14,
+                    fontWeight: 500,
+                    letterSpacing: 2,
+                  }}>
+                    {i + 1} / {total}
+                  </div>
+
+                  {/* Tag badge */}
+                  <div
+                    className="code-badge"
+                    style={{
+                      fontSize: "clamp(2.5rem, 6vw, 4.5rem)",
+                      fontWeight: 700,
+                      color: slide.accentColor,
+                      marginBottom: 16,
+                      letterSpacing: -1,
+                    }}
+                  >
+                    {slide.tag}
+                  </div>
+
+                  {/* Title */}
+                  <div style={{
+                    color: "rgba(255,255,255,0.9)",
+                    fontSize: "clamp(1.2rem, 3vw, 1.8rem)",
+                    fontWeight: 600,
+                    marginBottom: 8,
+                    letterSpacing: -0.5,
+                  }}>
+                    {slide.title}
+                  </div>
+
+                  {/* Korean description */}
+                  <div style={{
+                    color: "rgba(255,255,255,0.45)",
+                    fontSize: "clamp(0.9rem, 2vw, 1.15rem)",
+                    marginBottom: 8,
+                    fontWeight: 400,
+                  }}>
+                    {slide.description}
+                  </div>
+
+                  {/* Detail */}
+                  <div style={{
+                    color: "rgba(255,255,255,0.25)",
+                    fontSize: "clamp(0.75rem, 1.5vw, 0.9rem)",
+                    maxWidth: 500,
+                    textAlign: "center",
+                    lineHeight: 1.6,
+                    marginBottom: 40,
+                  }}>
+                    {slide.detail}
+                  </div>
+
+                  {/* Live example */}
+                  <ExampleComponent />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Bottom bar */}
+          <div style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: "0 0 24px 0",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 16,
+            zIndex: 10,
+          }}>
+            {/* Dot indicators */}
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {SLIDES.map((_, i) => (
+                <div
+                  key={i}
+                  className={`dot ${i === current ? "active" : ""}`}
+                  onClick={() => setCurrent(i)}
+                  style={{ cursor: "pointer" }}
+                />
+              ))}
+            </div>
+
+            {/* Nav hint */}
+            <div className="nav-hint" style={{
+              color: "rgba(255,255,255,0.3)",
+              fontSize: 12,
+              display: "flex",
+              gap: 16,
+              alignItems: "center",
+            }}>
+              <span style={{
+                padding: "2px 8px",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 4,
+                fontSize: 11,
+              }}>
+                ←
+              </span>
+              <span style={{
+                padding: "2px 8px",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 4,
+                fontSize: 11,
+              }}>
+                →
+              </span>
+              <span>키보드로 이동</span>
+            </div>
+
+            {/* Progress bar */}
+            <div style={{
+              width: "100%",
+              height: 3,
+              background: "rgba(255,255,255,0.06)",
+            }}>
+              <div
+                className="progress-bar"
+                style={{
+                  height: "100%",
+                  width: `${((current + 1) / total) * 100}%`,
+                  background: `linear-gradient(90deg, ${SLIDES[current].accentColor}, ${SLIDES[Math.min(current + 1, total - 1)].accentColor || SLIDES[current].accentColor})`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

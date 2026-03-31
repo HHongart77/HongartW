@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF 생성기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Noto Sans KR', sans-serif; }
+    body { background: #0f172a; }
+
+    .preview-page {
+      width: 210mm;
+      min-height: 297mm;
+      background: white;
+      transform-origin: top center;
+    }
+
+    .panel-scroll::-webkit-scrollbar,
+    .preview-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .panel-scroll::-webkit-scrollbar-track,
+    .preview-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .panel-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    .preview-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .shimmer {
+      background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .slide-up { animation: slideUp 0.4s ease-out; }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(100%); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateX(0); }
+      to { opacity: 0; transform: translateX(100%); }
+    }
+    .toast-in { animation: toastIn 0.3s ease-out; }
+    .toast-out { animation: toastOut 0.3s ease-in forwards; }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .spin { animation: spin 1s linear infinite; }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+      50% { box-shadow: 0 0 20px 4px rgba(99, 102, 241, 0.2); }
+    }
+    .pulse-glow { animation: pulse-glow 2s infinite; }
+
+    .editable-field:hover {
+      background: rgba(59, 130, 246, 0.05);
+    }
+    .editable-field:focus {
+      outline: none;
+      background: rgba(59, 130, 246, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Theme styles for preview */
+    .theme-modern .doc-header {
+      border-bottom: 3px solid var(--primary-color, #3b82f6);
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+    }
+    .theme-classic .doc-header {
+      border: 2px solid var(--primary-color, #1e3a5f);
+      padding: 24px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .theme-minimal .doc-header {
+      padding-bottom: 16px;
+      margin-bottom: 32px;
+    }
+
+    .theme-modern .section-heading {
+      border-left: 4px solid var(--primary-color, #3b82f6);
+      padding-left: 12px;
+      margin-bottom: 12px;
+    }
+    .theme-classic .section-heading {
+      border-bottom: 1px solid var(--primary-color, #1e3a5f);
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+    }
+    .theme-minimal .section-heading {
+      font-weight: 300;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } = React;
+
+    // ========================================
+    // Constants & Config
+    // ========================================
+
+    const DOC_TYPES = [
+      { value: 'report', label: '보고서', icon: '📊' },
+      { value: 'proposal', label: '기획서', icon: '💡' },
+      { value: 'resume', label: '이력서', icon: '👤' },
+      { value: 'suggestion', label: '제안서', icon: '📋' },
+      { value: 'letter', label: '편지', icon: '✉️' },
+      { value: 'manual', label: '매뉴얼', icon: '📖' },
+    ];
+
+    const THEMES = {
+      modern: { name: '모던', desc: '깔끔하고 세련된', colors: ['#3b82f6', '#6366f1', '#8b5cf6'], icon: '🔷' },
+      classic: { name: '클래식', desc: '격식있고 전통적인', colors: ['#1e3a5f', '#8b7355', '#2d4a3e'], icon: '📜' },
+      minimal: { name: '미니멀', desc: '심플하고 여백 중심', colors: ['#18181b', '#525252', '#737373'], icon: '◻️' },
+    };
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Button({ children, variant = 'primary', size = 'md', disabled, onClick, className = '', icon }) {
+      const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
+      const variants = {
+        primary: 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40',
+        secondary: 'bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600',
+        ghost: 'bg-transparent hover:bg-slate-700/50 text-slate-300',
+        danger: 'bg-red-600 hover:bg-red-700 text-white',
+        success: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-sm gap-1.5',
+        md: 'px-4 py-2.5 text-sm gap-2',
+        lg: 'px-6 py-3 text-base gap-2',
+      };
+      return (
+        <button onClick={onClick} disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
+          {icon && <span>{icon}</span>}
+          {children}
+        </button>
+      );
+    }
+
+    function Select({ label, value, onChange, options, className = '' }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>}
+          <select value={value} onChange={e => onChange(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors">
+            {options.map(o => (
+              <option key={o.value} value={o.value}>{o.icon ? `${o.icon} ${o.label}` : o.label}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    function Textarea({ label, value, onChange, placeholder, rows = 3, className = '' }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>}
+          <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
+            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors resize-none" />
+        </div>
+      );
+    }
+
+    function Toast({ message, type = 'success', onClose, exiting }) {
+      const colors = {
+        success: 'bg-emerald-600 border-emerald-500',
+        error: 'bg-red-600 border-red-500',
+        info: 'bg-indigo-600 border-indigo-500',
+      };
+      const icons = { success: '✓', error: '✕', info: 'ℹ' };
+      return (
+        <div className={`${exiting ? 'toast-out' : 'toast-in'} fixed top-6 right-6 z-50 ${colors[type]} border rounded-xl px-5 py-3 text-white shadow-2xl flex items-center gap-3`}>
+          <span className="text-lg">{icons[type]}</span>
+          <span className="text-sm font-medium">{message}</span>
+          <button onClick={onClose} className="ml-2 text-white/70 hover:text-white">✕</button>
+        </div>
+      );
+    }
+
+    function Spinner({ text }) {
+      return (
+        <div className="flex flex-col items-center gap-4 py-12">
+          <div className="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full spin" style={{borderWidth: 3}} />
+          {text && <p className="text-sm text-slate-400">{text}</p>}
+        </div>
+      );
+    }
+
+    function Badge({ children, color = 'indigo' }) {
+      const colors = {
+        indigo: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+        emerald: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+        amber: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      };
+      return (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${colors[color]}`}>
+          {children}
+        </span>
+      );
+    }
+
+    // ========================================
+    // Toast Hook
+    // ========================================
+    function useToast() {
+      const [toast, setToast] = useState(null);
+      const [exiting, setExiting] = useState(false);
+      const timerRef = useRef(null);
+
+      const show = useCallback((message, type = 'success') => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setExiting(false);
+        setToast({ message, type });
+        timerRef.current = setTimeout(() => {
+          setExiting(true);
+          setTimeout(() => { setToast(null); setExiting(false); }, 300);
+        }, 3000);
+      }, []);
+
+      const close = useCallback(() => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setExiting(true);
+        setTimeout(() => { setToast(null); setExiting(false); }, 300);
+      }, []);
+
+      const ToastEl = toast ? <Toast message={toast.message} type={toast.type} onClose={close} exiting={exiting} /> : null;
+      return { show, ToastEl };
+    }
+
+    // ========================================
+    // Template Generator
+    // ========================================
+    function generateTemplate(topic, docType) {
+      const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+      const docLabel = DOC_TYPES.find(d => d.value === docType)?.label || '문서';
+
+      const templates = {
+        report: {
+          theme: 'modern', primaryColor: '#3b82f6',
+          sections: [
+            { heading: '개요', content: '보고서의 목적과 배경을 작성하세요.' },
+            { heading: '현황 분석', content: '현재 상황을 분석한 내용을 작성하세요.' },
+            { heading: '주요 내용', content: '핵심 내용을 작성하세요.' },
+            { heading: '결론 및 제언', content: '결론과 제언 사항을 작성하세요.' },
+          ]
+        },
+        proposal: {
+          theme: 'modern', primaryColor: '#6366f1',
+          sections: [
+            { heading: '기획 배경', content: '기획 배경과 목적을 작성하세요.' },
+            { heading: '목표 및 전략', content: '목표와 추진 전략을 작성하세요.' },
+            { heading: '실행 계획', content: '구체적인 실행 계획을 작성하세요.' },
+            { heading: '기대 효과', content: '예상 효과와 성과를 작성하세요.' },
+          ]
+        },
+        resume: {
+          theme: 'minimal', primaryColor: '#18181b',
+          sections: [
+            { heading: '자기소개', content: '간략한 자기소개를 작성하세요.' },
+            { heading: '경력 사항', content: '경력 사항을 작성하세요.' },
+            { heading: '보유 기술', content: '보유 기술 및 역량을 작성하세요.' },
+            { heading: '학력 사항', content: '학력 사항을 작성하세요.' },
+          ]
+        },
+        suggestion: {
+          theme: 'classic', primaryColor: '#1e3a5f',
+          sections: [
+            { heading: '제안 배경', content: '제안의 배경과 필요성을 작성하세요.' },
+            { heading: '제안 내용', content: '구체적인 제안 내용을 작성하세요.' },
+            { heading: '기대 효과', content: '제안 시 기대되는 효과를 작성하세요.' },
+            { heading: '결론', content: '제안에 대한 결론을 작성하세요.' },
+          ]
+        },
+        letter: {
+          theme: 'classic', primaryColor: '#8b7355',
+          sections: [
+            { heading: '인사말', content: '받는 분에 대한 인사말을 작성하세요.' },
+            { heading: '본문', content: '편지의 본문 내용을 작성하세요.' },
+            { heading: '맺음말', content: '마무리 인사를 작성하세요.' },
+          ]
+        },
+        manual: {
+          theme: 'minimal', primaryColor: '#525252',
+          sections: [
+            { heading: '소개', content: '매뉴얼의 목적과 대상을 작성하세요.' },
+            { heading: '준비 사항', content: '사전 준비 사항을 작성하세요.' },
+            { heading: '사용 방법', content: '단계별 사용 방법을 작성하세요.' },
+            { heading: '주의 사항', content: '주의 사항 및 FAQ를 작성하세요.' },
+          ]
+        },
+      };
+
+      const tmpl = templates[docType] || templates.report;
+      return {
+        title: topic.trim() || `${docLabel} 제목`,
+        subtitle: '',
+        author: '작성자',
+        date: today,
+        sections: tmpl.sections,
+        theme: tmpl.theme,
+        primaryColor: tmpl.primaryColor,
+      };
+    }
+
+    // ========================================
+    // Setting Panel Component
+    // ========================================
+    function SettingPanel({ docType, setDocType, topic, setTopic, onGenerate, docData, setDocData }) {
+      return (
+        <div className="w-[360px] min-w-[360px] bg-slate-900 border-r border-slate-700/50 flex flex-col h-full">
+          {/* Panel Header */}
+          <div className="px-5 py-4 border-b border-slate-700/50">
+            <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+              문서 설정
+            </h2>
+          </div>
+
+          <div className="flex-1 overflow-y-auto panel-scroll p-5 space-y-5">
+            {/* Doc Type */}
+            <Select
+              label="문서 타입"
+              value={docType}
+              onChange={setDocType}
+              options={DOC_TYPES}
+            />
+
+            {/* Topic Input */}
+            <Textarea
+              label="주제 / 토픽"
+              value={topic}
+              onChange={setTopic}
+              placeholder="예: 2024년 마케팅 전략 보고서, React 개발자 이력서..."
+              rows={3}
+            />
+
+            {/* Generate Button */}
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={onGenerate}
+              disabled={!topic.trim()}
+              className="w-full pulse-glow"
+              icon="📄"
+            >
+              문서 만들기
+            </Button>
+
+            {/* Edit Section - appears after generation */}
+            {docData && !loading && (
+              <div className="space-y-4 slide-up">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">생성된 내용 편집</h3>
+                  <Badge color="emerald">편집 가능</Badge>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">제목</label>
+                    <input
+                      value={docData.title}
+                      onChange={e => setDocData({...docData, title: e.target.value})}
+                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">부제목</label>
+                    <input
+                      value={docData.subtitle || ''}
+                      onChange={e => setDocData({...docData, subtitle: e.target.value})}
+                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">작성자</label>
+                      <input
+                        value={docData.author}
+                        onChange={e => setDocData({...docData, author: e.target.value})}
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">날짜</label>
+                      <input
+                        value={docData.date}
+                        onChange={e => setDocData({...docData, date: e.target.value})}
+                        className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Theme selector */}
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-2">디자인 테마</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {Object.entries(THEMES).map(([key, t]) => (
+                        <button
+                          key={key}
+                          onClick={() => setDocData({...docData, theme: key, primaryColor: t.colors[0]})}
+                          className={`p-2 rounded-lg border text-center transition-all ${
+                            docData.theme === key
+                              ? 'border-indigo-500 bg-indigo-500/10'
+                              : 'border-slate-600 bg-slate-800 hover:border-slate-500'
+                          }`}
+                        >
+                          <div className="text-lg mb-1">{t.icon}</div>
+                          <div className="text-xs text-slate-300">{t.name}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Color Picker */}
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">주요 색상</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={docData.primaryColor}
+                        onChange={e => setDocData({...docData, primaryColor: e.target.value})}
+                        className="w-10 h-10 rounded-lg border border-slate-600 cursor-pointer bg-transparent"
+                      />
+                      <input
+                        value={docData.primaryColor}
+                        onChange={e => setDocData({...docData, primaryColor: e.target.value})}
+                        className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sections Editor */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-slate-500">섹션 ({docData.sections?.length || 0}개)</label>
+                      <button
+                        onClick={() => setDocData({
+                          ...docData,
+                          sections: [...(docData.sections || []), { heading: '새 섹션', content: '내용을 입력하세요.' }]
+                        })}
+                        className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                      >
+                        + 섹션 추가
+                      </button>
+                    </div>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto panel-scroll pr-1">
+                      {docData.sections?.map((sec, i) => (
+                        <div key={i} className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <input
+                              value={sec.heading}
+                              onChange={e => {
+                                const sections = [...docData.sections];
+                                sections[i] = {...sections[i], heading: e.target.value};
+                                setDocData({...docData, sections});
+                              }}
+                              className="bg-transparent text-sm font-medium text-slate-200 focus:outline-none flex-1 border-b border-transparent focus:border-indigo-500"
+                              placeholder="섹션 제목"
+                            />
+                            {docData.sections.length > 1 && (
+                              <button
+                                onClick={() => {
+                                  const sections = docData.sections.filter((_, idx) => idx !== i);
+                                  setDocData({...docData, sections});
+                                }}
+                                className="text-xs text-red-400 hover:text-red-300 ml-2"
+                              >
+                                삭제
+                              </button>
+                            )}
+                          </div>
+                          <textarea
+                            value={sec.content}
+                            onChange={e => {
+                              const sections = [...docData.sections];
+                              sections[i] = {...sections[i], content: e.target.value};
+                              setDocData({...docData, sections});
+                            }}
+                            rows={3}
+                            className="w-full bg-slate-900/50 rounded px-2 py-1.5 text-xs text-slate-300 focus:outline-none resize-none"
+                            placeholder="내용 입력..."
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Document Preview Component
+    // ========================================
+    function DocumentPreview({ docData, previewRef }) {
+      if (!docData) {
+        return (
+          <div className="flex-1 flex items-center justify-center bg-slate-800/30">
+            <div className="text-center">
+              <div className="text-6xl mb-4 opacity-30">📄</div>
+              <h3 className="text-lg font-medium text-slate-400 mb-2">미리보기 영역</h3>
+              <p className="text-sm text-slate-500">왼쪽에서 주제를 입력하고 문서 만들기 버튼을 눌러주세요</p>
+            </div>
+          </div>
+        );
+      }
+
+      const theme = docData.theme || 'modern';
+      const color = docData.primaryColor || '#3b82f6';
+
+      const themeStyles = {
+        modern: {
+          titleSize: '28px', titleWeight: '700',
+          subtitleSize: '16px', bodySize: '13px', headingSize: '16px',
+          headerBg: 'transparent',
+          pagePadding: '48px',
+        },
+        classic: {
+          titleSize: '26px', titleWeight: '700',
+          subtitleSize: '15px', bodySize: '13px', headingSize: '15px',
+          headerBg: 'transparent',
+          pagePadding: '56px',
+        },
+        minimal: {
+          titleSize: '24px', titleWeight: '300',
+          subtitleSize: '14px', bodySize: '13px', headingSize: '12px',
+          headerBg: 'transparent',
+          pagePadding: '64px',
+        },
+      };
+
+      const ts = themeStyles[theme];
+
+      return (
+        <div className="flex-1 overflow-auto preview-scroll bg-slate-800/30 p-8 flex justify-center">
+          <div
+            ref={previewRef}
+            className={`preview-page theme-${theme} rounded-sm shadow-2xl`}
+            style={{ '--primary-color': color, padding: ts.pagePadding }}
+          >
+            {/* Header */}
+            <div className="doc-header">
+              <h1 style={{ fontSize: ts.titleSize, fontWeight: ts.titleWeight, color: theme === 'minimal' ? '#18181b' : color, lineHeight: 1.3 }}>
+                {docData.title}
+              </h1>
+              {docData.subtitle && (
+                <p style={{ fontSize: ts.subtitleSize, color: '#64748b', marginTop: '8px' }}>
+                  {docData.subtitle}
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: '24px', marginTop: '16px', fontSize: '12px', color: '#94a3b8' }}>
+                {docData.author && <span>작성자: {docData.author}</span>}
+                {docData.date && <span>{docData.date}</span>}
+              </div>
+              {theme === 'minimal' && (
+                <div style={{ width: '40px', height: '1px', background: '#d1d5db', marginTop: '16px' }} />
+              )}
+            </div>
+
+            {/* Sections */}
+            {docData.sections?.map((sec, i) => (
+              <div key={i} style={{ marginBottom: '24px' }}>
+                <div className="section-heading">
+                  <h2 style={{
+                    fontSize: ts.headingSize,
+                    fontWeight: theme === 'minimal' ? '400' : '600',
+                    color: theme === 'minimal' ? '#525252' : color,
+                    letterSpacing: theme === 'minimal' ? '2px' : 'normal',
+                    textTransform: theme === 'minimal' ? 'uppercase' : 'none',
+                  }}>
+                    {sec.heading}
+                  </h2>
+                </div>
+                <div style={{ fontSize: ts.bodySize, color: '#374151', lineHeight: '1.8', whiteSpace: 'pre-wrap' }}>
+                  {sec.content}
+                </div>
+              </div>
+            ))}
+
+            {/* Footer */}
+            <div style={{
+              position: 'absolute',
+              bottom: ts.pagePadding,
+              left: ts.pagePadding,
+              right: ts.pagePadding,
+              borderTop: `1px solid ${theme === 'classic' ? color : '#e2e8f0'}`,
+              paddingTop: '12px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '10px',
+              color: '#94a3b8'
+            }}>
+              <span>{docData.title}</span>
+              <span>1 / 1</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [docType, setDocType] = useState('report');
+      const [topic, setTopic] = useState('');
+      const [docData, setDocData] = useState(null);
+      const [downloading, setDownloading] = useState(false);
+      const previewRef = useRef(null);
+      const { show: showToast, ToastEl } = useToast();
+
+      const handleGenerate = useCallback(() => {
+        if (!topic.trim()) return;
+        const result = generateTemplate(topic, docType);
+        setDocData(result);
+        showToast('문서 템플릿이 생성되었습니다!', 'success');
+      }, [topic, docType, showToast]);
+
+      const handleDownload = useCallback(async () => {
+        if (!previewRef.current || !docData || downloading) return;
+        setDownloading(true);
+        showToast('PDF를 생성하고 있습니다...', 'info');
+
+        try {
+          const el = previewRef.current;
+          const canvas = await html2canvas(el, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+          });
+
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+          const pdfW = pdf.internal.pageSize.getWidth();
+          const pdfH = pdf.internal.pageSize.getHeight();
+          pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+
+          const filename = (docData.title || 'document').replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_');
+          pdf.save(`${filename}.pdf`);
+          showToast('PDF가 다운로드되었습니다!', 'success');
+        } catch (err) {
+          console.error(err);
+          showToast('PDF 생성에 실패했습니다.', 'error');
+        } finally {
+          setDownloading(false);
+        }
+      }, [docData, downloading, showToast]);
+
+      return (
+        <div className="h-screen flex flex-col text-slate-200">
+          {ToastEl}
+
+          {/* Header */}
+          <header className="bg-slate-900 border-b border-slate-700/50 px-5 py-3 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-sm">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                  <polyline points="14,2 14,8 20,8"/>
+                  <path d="M8 13h3M8 17h6M8 9h1"/>
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-sm font-bold text-slate-100">PDF 생성기</h1>
+                <p className="text-xs text-slate-500">템플릿 기반 문서 작성 및 PDF 다운로드</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {docData && (
+                <div className="flex items-center gap-2 mr-2">
+                  <Badge color={docData.theme === 'modern' ? 'indigo' : docData.theme === 'classic' ? 'amber' : 'emerald'}>
+                    {THEMES[docData.theme]?.icon} {THEMES[docData.theme]?.name}
+                  </Badge>
+                </div>
+              )}
+              <Button
+                variant="success"
+                size="sm"
+                onClick={handleDownload}
+                disabled={!docData || downloading}
+                icon={downloading ? null : '↓'}
+              >
+                {downloading ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full spin" />
+                    생성 중...
+                  </span>
+                ) : 'PDF 다운로드'}
+              </Button>
+            </div>
+          </header>
+
+          {/* Main Content */}
+          <div className="flex flex-1 overflow-hidden">
+            <SettingPanel
+              docType={docType}
+              setDocType={setDocType}
+              topic={topic}
+              setTopic={setTopic}
+              onGenerate={handleGenerate}
+              docData={docData}
+              setDocData={setDocData}
+            />
+            <DocumentPreview docData={docData} previewRef={previewRef} />
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

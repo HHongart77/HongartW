@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR코드 생성기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Noto Sans KR', sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    function Button({ children, variant = 'primary', size = 'md', disabled = false, onClick, className = '' }) {
+      const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+      const variants = {
+        primary: 'bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 shadow-sm',
+        secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-indigo-500',
+        danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 shadow-sm',
+        ghost: 'text-gray-600 hover:bg-gray-100 focus:ring-gray-400',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-4 py-2 text-sm',
+        lg: 'px-6 py-3 text-base',
+      };
+      return (
+        <button
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, value, onChange, placeholder, type = 'text', className = '' }) {
+      return (
+        <div className={className}>
+          {label && <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>}
+          <input
+            type={type}
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+          />
+        </div>
+      );
+    }
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-white rounded-xl shadow-sm border border-gray-200 p-6 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function ColorPicker({ label, value, onChange }) {
+      return (
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-gray-700">{label}</label>
+          <div className="flex items-center gap-3">
+            <input
+              type="color"
+              value={value}
+              onChange={onChange}
+              className="w-10 h-10 rounded-lg border border-gray-300 cursor-pointer p-0.5"
+            />
+            <span className="text-sm text-gray-500 font-mono uppercase">{value}</span>
+          </div>
+        </div>
+      );
+    }
+
+    function RangeSlider({ label, value, onChange, min, max, step = 1, unit = 'px' }) {
+      return (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-gray-700">{label}</label>
+            <span className="text-sm font-semibold text-indigo-600">{value}{unit}</span>
+          </div>
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            onChange={onChange}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+          />
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>{min}{unit}</span>
+            <span>{max}{unit}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 QR코드 미리보기 컴포넌트
+    // ========================================
+
+    function QRPreview({ text, size, fgColor, bgColor, qrRef }) {
+      const [error, setError] = useState(null);
+
+      useEffect(() => {
+        if (!qrRef.current) return;
+
+        // 이전 QR코드 제거
+        qrRef.current.innerHTML = '';
+        setError(null);
+
+        if (!text.trim()) return;
+
+        try {
+          const QR = window.QRCode;
+          if (!QR) {
+            setError('QR 라이브러리를 불러오지 못했습니다. 페이지를 새로고침 해주세요.');
+            return;
+          }
+          new QR(qrRef.current, {
+            text: text,
+            width: size,
+            height: size,
+            colorDark: fgColor,
+            colorLight: bgColor,
+            correctLevel: QR.CorrectLevel.M,
+          });
+        } catch (e) {
+          setError('QR코드 생성 중 오류: ' + e.message);
+        }
+      }, [text, size, fgColor, bgColor, qrRef]);
+
+      return (
+        <div className="flex flex-col items-center gap-4">
+          <div
+            className="rounded-lg border-2 border-dashed border-gray-200 p-4 bg-white flex items-center justify-center"
+            style={{ minWidth: size + 32, minHeight: size + 32 }}
+          >
+            {!text.trim()
+              ? <p className="text-gray-400 text-sm">텍스트를 입력하세요</p>
+              : <div ref={qrRef} />
+            }
+          </div>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 App Component
+    // ========================================
+
+    function App() {
+      const [text, setText] = useState('');
+      const [size, setSize] = useState(256);
+      const [fgColor, setFgColor] = useState('#000000');
+      const [bgColor, setBgColor] = useState('#ffffff');
+      const qrRef = useRef(null);
+
+      const handleDownload = useCallback(() => {
+        if (!qrRef.current || !text.trim()) return;
+        const canvas = qrRef.current.querySelector('canvas');
+        if (!canvas) return;
+        const link = document.createElement('a');
+        link.download = 'qrcode.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      }, [text]);
+
+      const handleReset = useCallback(() => {
+        setText('');
+        setSize(256);
+        setFgColor('#000000');
+        setBgColor('#ffffff');
+      }, []);
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+          {/* Header */}
+          <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10">
+            <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-3">
+              <div className="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                </svg>
+              </div>
+              <h1 className="text-xl font-bold text-gray-900">QR코드 생성기</h1>
+            </div>
+          </header>
+
+          {/* Main Content */}
+          <main className="max-w-4xl mx-auto px-4 py-8">
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* 설정 패널 */}
+              <div className="flex flex-col gap-6">
+                <Card>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4">내용 입력</h2>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-gray-700">텍스트 또는 URL</label>
+                    <textarea
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      placeholder="https://example.com 또는 원하는 텍스트를 입력하세요"
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors resize-none"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                      {text.length > 0 ? `${text.length}자 입력됨` : '입력 시 실시간으로 QR코드가 생성됩니다'}
+                    </p>
+                  </div>
+                </Card>
+
+                <Card>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4">크기 설정</h2>
+                  <RangeSlider
+                    label="QR코드 크기"
+                    value={size}
+                    onChange={(e) => setSize(Number(e.target.value))}
+                    min={128}
+                    max={512}
+                    step={16}
+                  />
+                </Card>
+
+                <Card>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4">색상 설정</h2>
+                  <div className="grid grid-cols-2 gap-6">
+                    <ColorPicker
+                      label="전경색 (QR코드)"
+                      value={fgColor}
+                      onChange={(e) => setFgColor(e.target.value)}
+                    />
+                    <ColorPicker
+                      label="배경색"
+                      value={bgColor}
+                      onChange={(e) => setBgColor(e.target.value)}
+                    />
+                  </div>
+                </Card>
+
+                {/* 버튼 영역 */}
+                <div className="flex gap-3">
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    className="flex-1"
+                    disabled={!text.trim()}
+                    onClick={handleDownload}
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    PNG 다운로드
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    onClick={handleReset}
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    초기화
+                  </Button>
+                </div>
+              </div>
+
+              {/* QR코드 미리보기 */}
+              <div className="flex flex-col gap-6">
+                <Card className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
+                  <h2 className="text-lg font-semibold text-gray-900 mb-6 self-start">미리보기</h2>
+                  <QRPreview
+                    text={text}
+                    size={size}
+                    fgColor={fgColor}
+                    bgColor={bgColor}
+                    qrRef={qrRef}
+                  />
+                  {text.trim() && (
+                    <p className="text-xs text-gray-400 mt-4 text-center max-w-xs truncate">
+                      {text}
+                    </p>
+                  )}
+                </Card>
+              </div>
+            </div>
+          </main>
+
+          {/* Footer */}
+          <footer className="text-center py-6 text-sm text-gray-400">
+            QR코드 생성기 &mdash; 텍스트나 URL을 QR코드로 변환합니다
+          </footer>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 Rendering
+    // ========================================
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

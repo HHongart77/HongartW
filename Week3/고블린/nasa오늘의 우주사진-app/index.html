@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>COSMOS TODAY - NASA APOD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #root { width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; }
+
+    .glass {
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-light {
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glass-heavy {
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; } to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideLeft {
+      from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 8px rgba(96, 165, 250, 0.3); }
+      50% { box-shadow: 0 0 20px rgba(96, 165, 250, 0.6); }
+    }
+    @keyframes dot-bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+    .animate-fadeIn { animation: fadeIn 0.5s ease-out forwards; }
+    .animate-slideUp { animation: slideUp 0.5s ease-out forwards; }
+    .animate-slideLeft { animation: slideLeft 0.4s ease-out forwards; }
+    .animate-slideDown { animation: slideDown 0.4s ease-out forwards; }
+
+    .loading-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: rgba(96, 165, 250, 0.8); display: inline-block;
+      animation: dot-bounce 1.4s infinite ease-in-out both;
+    }
+    .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+    .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+
+    .glow-border { box-shadow: 0 0 15px rgba(96, 165, 250, 0.15), inset 0 0 15px rgba(96, 165, 250, 0.05); }
+    .text-glow { text-shadow: 0 0 20px rgba(96, 165, 250, 0.5); }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+    .bg-gradient-overlay {
+      background: linear-gradient(180deg,
+        rgba(0,0,0,0.7) 0%,
+        rgba(0,0,0,0.1) 25%,
+        rgba(0,0,0,0.05) 50%,
+        rgba(0,0,0,0.3) 75%,
+        rgba(0,0,0,0.85) 100%
+      );
+    }
+
+    .gallery-grid-item { transition: transform 0.3s, box-shadow 0.3s; }
+    .gallery-grid-item:hover { transform: scale(1.03); box-shadow: 0 0 24px rgba(96, 165, 250, 0.3); }
+
+    input::placeholder { color: rgba(255,255,255,0.35); }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { inter: ['Inter', 'sans-serif'] },
+          colors: {
+            space: { 900: '#050510', 800: '#0a0a20', 700: '#10103a' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-space-900 text-white font-inter">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // 1. React Hooks Destructuring
+    // ========================================
+    const { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } = React;
+
+    // ========================================
+    // 2. Constants & API Configuration
+    // ========================================
+    const NASA_API_KEY = 'DEMO_KEY';
+    const OWM_API_KEY = 'f4f2f47b6251a8d2574509929fc7ba13';
+    const TODAY = '2026-03-31';
+
+    function formatDate(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      const days = ['일', '월', '화', '수', '목', '금', '토'];
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      const day = d.getDate();
+      return `${y}년 ${m}월 ${day}일 (${days[d.getDay()]})`;
+    }
+
+    function addDays(dateStr, n) {
+      const d = new Date(dateStr + 'T00:00:00');
+      d.setDate(d.getDate() + n);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function getWeekDates(centerDate) {
+      const dates = [];
+      for (let i = -3; i <= 3; i++) {
+        dates.push(addDays(centerDate, i));
+      }
+      return dates;
+    }
+
+    function shortDay(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      return ['일','월','화','수','목','금','토'][d.getDay()];
+    }
+
+    function shortDate(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      return `${d.getMonth()+1}/${d.getDate()}`;
+    }
+
+    // ========================================
+    // 3. Design System Components
+    // ========================================
+    function LoadingDots() {
+      return (
+        <div className="flex items-center gap-2 justify-center py-4">
+          <span className="loading-dot"></span>
+          <span className="loading-dot"></span>
+          <span className="loading-dot"></span>
+        </div>
+      );
+    }
+
+    function IconButton({ icon, label, active, onClick, className = '', size = 'md' }) {
+      const sizes = { sm: 'w-8 h-8 text-sm', md: 'w-10 h-10 text-base', lg: 'w-12 h-12 text-lg' };
+      return (
+        <button
+          onClick={onClick}
+          title={label}
+          aria-label={label}
+          className={`${sizes[size]} rounded-xl flex items-center justify-center transition-all duration-300
+            ${active ? 'glass-light text-blue-300 glow-border' : 'text-white/50 hover:text-white/80 hover:bg-white/5'}
+            ${className}`}
+        >
+          {icon}
+        </button>
+      );
+    }
+
+    function GlassCard({ children, className = '', onClick }) {
+      return (
+        <div onClick={onClick} className={`glass rounded-2xl ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Badge({ children, className = '' }) {
+      return (
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium glass-light ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function PillButton({ active, onClick, children, className = '' }) {
+      return (
+        <button
+          onClick={onClick}
+          className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-300
+            ${active
+              ? 'bg-blue-500/30 text-blue-200 border border-blue-400/30 shadow-[0_0_12px_rgba(96,165,250,0.2)]'
+              : 'text-white/40 hover:text-white/70 hover:bg-white/5 border border-transparent'}
+            ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    // SVG Icons
+    const Icons = {
+      home: <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z"/></svg>,
+      gallery: <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>,
+      info: <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>,
+      settings: <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>,
+      chevLeft: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>,
+      chevRight: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>,
+      hd: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>,
+      calendar: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>,
+      desc: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/></svg>,
+      fullscreen: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg>,
+      search: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>,
+      location: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
+      close: <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>,
+      star: <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>,
+      wind: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1014 16H2m15.73-8.27A2.5 2.5 0 1119.5 12H2"/></svg>,
+      drop: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>,
+    };
+
+    // ========================================
+    // 4. Weather Widget Component
+    // ========================================
+    function WeatherWidget() {
+      const [weather, setWeather] = useState(null);
+      const [forecast, setForecast] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [expanded, setExpanded] = useState(false);
+      const [cityInput, setCityInput] = useState('');
+      const [showSearch, setShowSearch] = useState(false);
+      const [error, setError] = useState(null);
+
+      const fetchWeatherByCoords = useCallback(async (lat, lon) => {
+        setLoading(true);
+        setError(null);
+        try {
+          const [wRes, fRes] = await Promise.all([
+            fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OWM_API_KEY}&units=metric&lang=kr`),
+            fetch(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OWM_API_KEY}&units=metric&lang=kr`)
+          ]);
+          const wData = await wRes.json();
+          const fData = await fRes.json();
+          setWeather(wData);
+          setForecast(fData.list ? fData.list.slice(0, 5) : []);
+        } catch (e) {
+          setError('날씨 정보를 불러올 수 없습니다');
+        }
+        setLoading(false);
+      }, []);
+
+      const searchCity = useCallback(async () => {
+        if (!cityInput.trim()) return;
+        try {
+          const res = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(cityInput)}&limit=1&appid=${OWM_API_KEY}`);
+          const data = await res.json();
+          if (data.length > 0) {
+            fetchWeatherByCoords(data[0].lat, data[0].lon);
+            setShowSearch(false);
+            setCityInput('');
+          } else {
+            setError('도시를 찾을 수 없습니다');
+          }
+        } catch (e) {
+          setError('검색에 실패했습니다');
+        }
+      }, [cityInput, fetchWeatherByCoords]);
+
+      useEffect(() => {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude),
+            () => fetchWeatherByCoords(37.5665, 126.978) // Seoul fallback
+          );
+        } else {
+          fetchWeatherByCoords(37.5665, 126.978);
+        }
+      }, [fetchWeatherByCoords]);
+
+      if (loading && !weather) {
+        return (
+          <GlassCard className="p-3 animate-fadeIn">
+            <LoadingDots />
+          </GlassCard>
+        );
+      }
+
+      if (error && !weather) {
+        return (
+          <GlassCard className="p-3 animate-fadeIn">
+            <p className="text-xs text-red-300">{error}</p>
+          </GlassCard>
+        );
+      }
+
+      if (!weather || !weather.main) return null;
+
+      const iconUrl = `https://openweathermap.org/img/wn/${weather.weather[0].icon}@2x.png`;
+
+      return (
+        <div className="animate-slideLeft">
+          <GlassCard
+            className={`p-3 cursor-pointer transition-all duration-500 glow-border ${expanded ? 'w-72' : 'w-auto'}`}
+            onClick={() => !showSearch && setExpanded(!expanded)}
+          >
+            {/* Compact View */}
+            <div className="flex items-center gap-2">
+              <img src={iconUrl} alt="weather" className="w-10 h-10 -my-1" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="text-lg font-semibold">{Math.round(weather.main.temp)}°</span>
+                  <span className="text-[10px] text-white/40 truncate">{weather.weather[0].description}</span>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] text-white/40">
+                  {Icons.location}
+                  <span className="truncate">{weather.name}</span>
+                </div>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowSearch(!showSearch); }}
+                className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/70 transition-colors"
+              >
+                {Icons.search}
+              </button>
+            </div>
+
+            {/* Search bar */}
+            {showSearch && (
+              <div className="mt-2 animate-slideDown" onClick={(e) => e.stopPropagation()}>
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={cityInput}
+                    onChange={(e) => setCityInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && searchCity()}
+                    placeholder="도시 검색..."
+                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-blue-400/40"
+                    autoFocus
+                  />
+                  <button onClick={searchCity} className="px-2 py-1 bg-blue-500/20 border border-blue-400/20 rounded-lg text-xs text-blue-300 hover:bg-blue-500/30 transition-colors">
+                    검색
+                  </button>
+                </div>
+                {error && <p className="text-[10px] text-red-300 mt-1">{error}</p>}
+              </div>
+            )}
+
+            {/* Expanded Details */}
+            {expanded && (
+              <div className="mt-3 pt-3 border-t border-white/10 animate-slideUp">
+                <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                  <div className="glass-light rounded-lg p-2">
+                    <div className="text-[10px] text-white/40 flex items-center justify-center gap-1">{Icons.drop} 습도</div>
+                    <div className="text-sm font-medium">{weather.main.humidity}%</div>
+                  </div>
+                  <div className="glass-light rounded-lg p-2">
+                    <div className="text-[10px] text-white/40 flex items-center justify-center gap-1">{Icons.wind} 바람</div>
+                    <div className="text-sm font-medium">{weather.wind.speed}m/s</div>
+                  </div>
+                  <div className="glass-light rounded-lg p-2">
+                    <div className="text-[10px] text-white/40">체감</div>
+                    <div className="text-sm font-medium">{Math.round(weather.main.feels_like)}°</div>
+                  </div>
+                </div>
+
+                {/* Forecast strip */}
+                {forecast && forecast.length > 0 && (
+                  <div className="flex gap-1 overflow-x-auto pb-1">
+                    {forecast.map((f, i) => {
+                      const time = new Date(f.dt * 1000);
+                      const hour = `${time.getHours()}시`;
+                      return (
+                        <div key={i} className="flex-shrink-0 glass-light rounded-lg p-1.5 text-center min-w-[52px]">
+                          <div className="text-[9px] text-white/40">{hour}</div>
+                          <img src={`https://openweathermap.org/img/wn/${f.weather[0].icon}@2x.png`} alt="" className="w-7 h-7 mx-auto" />
+                          <div className="text-[11px] font-medium">{Math.round(f.main.temp)}°</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </GlassCard>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 5. Date Navigation Bar
+    // ========================================
+    function DateNavBar({ selectedDate, onDateSelect, weekCenter, onWeekShift }) {
+      const dates = getWeekDates(weekCenter);
+      const todayStr = TODAY;
+
+      return (
+        <div className="flex items-center gap-1">
+          <button onClick={() => onWeekShift(-7)} className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white/70 transition-colors">
+            {Icons.chevLeft}
+          </button>
+          <div className="flex gap-1 overflow-x-auto flex-1 justify-center">
+            {dates.map((d) => {
+              const isSelected = d === selectedDate;
+              const isToday = d === todayStr;
+              const isFuture = d > todayStr;
+              return (
+                <button
+                  key={d}
+                  disabled={isFuture}
+                  onClick={() => !isFuture && onDateSelect(d)}
+                  className={`flex flex-col items-center px-2 py-1 rounded-xl text-[10px] transition-all duration-200 min-w-[40px]
+                    ${isFuture ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer'}
+                    ${isSelected ? 'bg-blue-500/25 text-blue-200 border border-blue-400/30' : 'hover:bg-white/5 text-white/50'}
+                    ${isToday && !isSelected ? 'text-blue-300' : ''}`}
+                >
+                  <span className="font-medium">{shortDay(d)}</span>
+                  <span className={`text-[11px] ${isSelected ? 'font-semibold' : ''}`}>{shortDate(d)}</span>
+                  {isToday && <div className="w-1 h-1 rounded-full bg-blue-400 mt-0.5"></div>}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => onWeekShift(7)}
+            disabled={addDays(weekCenter, 7) > todayStr}
+            className={`p-1 rounded-lg transition-colors ${addDays(weekCenter, 7) > todayStr ? 'opacity-20' : 'hover:bg-white/10 text-white/40 hover:text-white/70'}`}
+          >
+            {Icons.chevRight}
+          </button>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 6. Sidebar (Desktop)
+    // ========================================
+    function DesktopSidebar({ activePanel, onPanelChange }) {
+      const items = [
+        { id: 'info', icon: Icons.info, label: '정보' },
+        { id: 'hd', icon: Icons.hd, label: 'HD' },
+        { id: 'calendar', icon: Icons.calendar, label: '달력' },
+        { id: 'desc', icon: Icons.desc, label: '설명' },
+      ];
+      return (
+        <div className="hidden md:flex flex-col gap-2 glass rounded-2xl p-2 animate-fadeIn">
+          {items.map(item => (
+            <IconButton
+              key={item.id}
+              icon={item.icon}
+              label={item.label}
+              active={activePanel === item.id}
+              onClick={() => onPanelChange(activePanel === item.id ? null : item.id)}
+            />
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 7. Mobile Panel Switcher
+    // ========================================
+    function MobilePanelSwitcher({ activePanel, onPanelChange }) {
+      const items = [
+        { id: 'info', label: '정보' },
+        { id: 'desc', label: '설명' },
+        { id: 'calendar', label: '달력' },
+      ];
+      return (
+        <div className="flex md:hidden gap-1 justify-center animate-slideDown">
+          {items.map(item => (
+            <PillButton
+              key={item.id}
+              active={activePanel === item.id}
+              onClick={() => onPanelChange(activePanel === item.id ? null : item.id)}
+            >
+              {item.label}
+            </PillButton>
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 8. Panel Contents
+    // ========================================
+    function InfoPanel({ apod }) {
+      if (!apod) return null;
+      return (
+        <div className="animate-slideUp space-y-3">
+          <h2 className="text-lg font-semibold text-glow">{apod.title}</h2>
+          <div className="flex flex-wrap gap-2">
+            <Badge>{apod.date}</Badge>
+            {apod.copyright && <Badge className="text-yellow-200">&copy; {apod.copyright.trim()}</Badge>}
+            <Badge className="text-blue-200">{apod.media_type === 'video' ? '영상' : '이미지'}</Badge>
+          </div>
+          <p className="text-xs text-white/60 leading-relaxed line-clamp-4">{apod.explanation}</p>
+        </div>
+      );
+    }
+
+    function DescPanel({ apod }) {
+      if (!apod) return null;
+      return (
+        <div className="animate-slideUp">
+          <h3 className="text-sm font-semibold mb-2 text-blue-200">상세 설명</h3>
+          <p className="text-xs text-white/60 leading-relaxed max-h-48 overflow-y-auto pr-1">{apod.explanation}</p>
+        </div>
+      );
+    }
+
+    function HDPanel({ apod }) {
+      if (!apod) return null;
+      const hdUrl = apod.hdurl || apod.url;
+      return (
+        <div className="animate-slideUp space-y-3">
+          <h3 className="text-sm font-semibold text-blue-200">고화질 이미지</h3>
+          <p className="text-[11px] text-white/40">원본 해상도의 이미지를 새 탭에서 엽니다</p>
+          <a
+            href={hdUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 glass-light rounded-xl text-xs text-blue-200 hover:bg-blue-500/20 transition-colors glow-border"
+          >
+            {Icons.hd} HD 이미지 열기
+          </a>
+          {apod.media_type === 'video' && (
+            <a
+              href={apod.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 glass-light rounded-xl text-xs text-purple-200 hover:bg-purple-500/20 transition-colors ml-2"
+            >
+              영상 열기
+            </a>
+          )}
+        </div>
+      );
+    }
+
+    function CalendarPanel({ selectedDate, onDateSelect, weekCenter, onWeekShift }) {
+      return (
+        <div className="animate-slideUp space-y-3">
+          <h3 className="text-sm font-semibold text-blue-200">날짜 탐색</h3>
+          <DateNavBar
+            selectedDate={selectedDate}
+            onDateSelect={onDateSelect}
+            weekCenter={weekCenter}
+            onWeekShift={onWeekShift}
+          />
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              max={TODAY}
+              min="1995-06-16"
+              value={selectedDate}
+              onChange={(e) => e.target.value && onDateSelect(e.target.value)}
+              className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-blue-400/40 [color-scheme:dark]"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 9. Gallery Tab
+    // ========================================
+    function GalleryView({ cache, onSelect, currentDate }) {
+      const [galleryData, setGalleryData] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        async function loadGallery() {
+          setLoading(true);
+          const dates = [];
+          for (let i = 0; i < 12; i++) {
+            dates.push(addDays(TODAY, -i));
+          }
+          const results = [];
+          for (const d of dates) {
+            if (cache.current[d]) {
+              results.push(cache.current[d]);
+            } else {
+              try {
+                const res = await fetch(`https://api.nasa.gov/planetary/apod?api_key=${NASA_API_KEY}&date=${d}`);
+                const data = await res.json();
+                if (!data.error) {
+                  cache.current[d] = data;
+                  results.push(data);
+                }
+              } catch (e) { /* skip */ }
+            }
+          }
+          setGalleryData(results);
+          setLoading(false);
+        }
+        loadGallery();
+      }, [cache]);
+
+      if (loading) {
+        return (
+          <div className="flex flex-col items-center justify-center py-12">
+            <LoadingDots />
+            <p className="text-xs text-white/40 mt-2">갤러리 로딩 중...</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="animate-fadeIn">
+          <h2 className="text-lg font-semibold text-glow mb-4">최근 우주 사진</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[60vh] overflow-y-auto pr-1 pb-2">
+            {galleryData.map((item) => (
+              <button
+                key={item.date}
+                onClick={() => onSelect(item.date)}
+                className={`gallery-grid-item rounded-xl overflow-hidden relative group
+                  ${item.date === currentDate ? 'ring-2 ring-blue-400/60' : ''}`}
+              >
+                {item.media_type === 'image' ? (
+                  <img
+                    src={item.url}
+                    alt={item.title}
+                    className="w-full h-28 sm:h-32 object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-full h-28 sm:h-32 bg-space-800 flex items-center justify-center">
+                    <span className="text-3xl">&#9654;</span>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                  <p className="text-[10px] font-medium truncate">{item.title}</p>
+                  <p className="text-[9px] text-white/50">{item.date}</p>
+                </div>
+                {item.date === currentDate && (
+                  <div className="absolute top-1 right-1 text-blue-300">{Icons.star}</div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 10. Settings Tab
+    // ========================================
+    function SettingsView() {
+      return (
+        <div className="animate-slideUp space-y-4">
+          <h2 className="text-lg font-semibold text-glow">설정</h2>
+
+          <GlassCard className="p-4 space-y-3">
+            <h3 className="text-sm font-medium text-blue-200">API 정보</h3>
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-white/40">NASA APOD API</span>
+                <Badge>DEMO_KEY</Badge>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-white/40">OpenWeatherMap</span>
+                <Badge className="text-green-200">연결됨</Badge>
+              </div>
+            </div>
+          </GlassCard>
+
+          <GlassCard className="p-4 space-y-3">
+            <h3 className="text-sm font-medium text-blue-200">앱 정보</h3>
+            <div className="space-y-2 text-xs text-white/50">
+              <div className="flex justify-between">
+                <span>버전</span><span className="text-white/70">1.0.0</span>
+              </div>
+              <div className="flex justify-between">
+                <span>데이터 소스</span><span className="text-white/70">NASA Open API</span>
+              </div>
+              <div className="flex justify-between">
+                <span>날씨 데이터</span><span className="text-white/70">OpenWeatherMap</span>
+              </div>
+            </div>
+          </GlassCard>
+
+          <GlassCard className="p-4 space-y-2">
+            <h3 className="text-sm font-medium text-blue-200">링크</h3>
+            <div className="flex flex-col gap-2">
+              <a href="https://apod.nasa.gov/" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-300 hover:text-blue-200 transition-colors">NASA APOD 공식 사이트 &rarr;</a>
+              <a href="https://api.nasa.gov/" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-300 hover:text-blue-200 transition-colors">NASA Open API &rarr;</a>
+              <a href="https://openweathermap.org/api" target="_blank" rel="noopener noreferrer" className="text-xs text-blue-300 hover:text-blue-200 transition-colors">OpenWeatherMap API &rarr;</a>
+            </div>
+          </GlassCard>
+
+          <p className="text-center text-[10px] text-white/20 pt-2">COSMOS TODAY &copy; 2026</p>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 11. App Component
+    // ========================================
+    function App() {
+      const [selectedDate, setSelectedDate] = useState(TODAY);
+      const [weekCenter, setWeekCenter] = useState(TODAY);
+      const [apod, setApod] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [activeTab, setActiveTab] = useState('home');
+      const [activePanel, setActivePanel] = useState('info');
+      const [isFullscreen, setIsFullscreen] = useState(false);
+      const cache = useRef({});
+
+      // Fetch APOD data
+      const fetchApod = useCallback(async (date) => {
+        if (cache.current[date]) {
+          setApod(cache.current[date]);
+          setLoading(false);
+          return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+          const res = await fetch(`https://api.nasa.gov/planetary/apod?api_key=${NASA_API_KEY}&date=${date}`);
+          const data = await res.json();
+          if (data.error) {
+            setError(data.error.message || '데이터를 불러올 수 없습니다');
+          } else {
+            cache.current[date] = data;
+            setApod(data);
+          }
+        } catch (e) {
+          setError('네트워크 오류가 발생했습니다');
+        }
+        setLoading(false);
+      }, []);
+
+      useEffect(() => {
+        fetchApod(selectedDate);
+      }, [selectedDate, fetchApod]);
+
+      const handleDateSelect = useCallback((date) => {
+        setSelectedDate(date);
+        setActiveTab('home');
+      }, []);
+
+      const handleWeekShift = useCallback((days) => {
+        setWeekCenter(prev => {
+          const newCenter = addDays(prev, days);
+          if (newCenter > TODAY) return prev;
+          return newCenter;
+        });
+      }, []);
+
+      const toggleFullscreen = useCallback(() => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+          setIsFullscreen(true);
+        } else {
+          document.exitFullscreen();
+          setIsFullscreen(false);
+        }
+      }, []);
+
+      // Background image
+      const bgImage = apod && apod.media_type === 'image' ? apod.url : null;
+
+      const panelContent = useMemo(() => {
+        if (activePanel === 'info') return <InfoPanel apod={apod} />;
+        if (activePanel === 'desc') return <DescPanel apod={apod} />;
+        if (activePanel === 'hd') return <HDPanel apod={apod} />;
+        if (activePanel === 'calendar') return <CalendarPanel selectedDate={selectedDate} onDateSelect={handleDateSelect} weekCenter={weekCenter} onWeekShift={handleWeekShift} />;
+        return null;
+      }, [activePanel, apod, selectedDate, weekCenter, handleDateSelect, handleWeekShift]);
+
+      const tabItems = [
+        { id: 'home', icon: Icons.home, label: '홈' },
+        { id: 'gallery', icon: Icons.gallery, label: '갤러리' },
+        { id: 'info', icon: Icons.info, label: '정보' },
+        { id: 'settings', icon: Icons.settings, label: '설정' },
+      ];
+
+      return (
+        <div className="relative w-full h-full overflow-hidden bg-space-900">
+          {/* Background APOD Image */}
+          {bgImage && (
+            <div className="absolute inset-0 animate-fadeIn" key={bgImage}>
+              <img src={bgImage} alt="" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-overlay"></div>
+            </div>
+          )}
+
+          {/* Video Background */}
+          {apod && apod.media_type === 'video' && (
+            <div className="absolute inset-0">
+              <div className="w-full h-full bg-space-900"></div>
+              <div className="absolute inset-0 bg-gradient-overlay"></div>
+            </div>
+          )}
+
+          {/* Fallback bg */}
+          {!apod && (
+            <div className="absolute inset-0 bg-gradient-to-br from-space-900 via-space-800 to-space-700"></div>
+          )}
+
+          {/* Main Layout */}
+          <div className="relative z-10 w-full h-full flex flex-col">
+
+            {/* Top Bar */}
+            <div className="flex items-start justify-between p-4 md:p-6">
+              {/* Left: Logo + Date */}
+              <div className="animate-fadeIn">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]"></div>
+                  <h1 className="text-sm font-bold tracking-widest text-white/80">NASA APOD</h1>
+                </div>
+                <p className="text-xs text-white/40 mt-1 ml-4">{formatDate(selectedDate)}</p>
+              </div>
+
+              {/* Right: Weather + actions */}
+              <div className="flex flex-col items-end gap-2">
+                <WeatherWidget />
+                <div className="flex gap-1">
+                  {apod && apod.hdurl && (
+                    <a
+                      href={apod.hdurl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 glass rounded-xl text-white/50 hover:text-blue-300 transition-colors"
+                      title="HD 이미지"
+                    >
+                      {Icons.hd}
+                    </a>
+                  )}
+                  <button
+                    onClick={toggleFullscreen}
+                    className="p-2 glass rounded-xl text-white/50 hover:text-blue-300 transition-colors"
+                    title="전체화면"
+                  >
+                    {Icons.fullscreen}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Panel Switcher */}
+            {activeTab === 'home' && (
+              <div className="px-4">
+                <MobilePanelSwitcher activePanel={activePanel} onPanelChange={setActivePanel} />
+              </div>
+            )}
+
+            {/* Middle: Sidebar + Content */}
+            <div className="flex-1 flex items-end md:items-center overflow-hidden px-4 md:px-6 pb-2">
+              {/* Desktop Sidebar */}
+              {activeTab === 'home' && (
+                <div className="hidden md:block mr-4">
+                  <DesktopSidebar activePanel={activePanel} onPanelChange={setActivePanel} />
+                </div>
+              )}
+
+              {/* Video embed if video type */}
+              {activeTab === 'home' && apod && apod.media_type === 'video' && (
+                <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
+                  <div className="w-[80%] max-w-2xl aspect-video pointer-events-auto rounded-2xl overflow-hidden shadow-2xl">
+                    <iframe
+                      src={apod.url}
+                      className="w-full h-full"
+                      allowFullScreen
+                      title={apod.title}
+                    ></iframe>
+                  </div>
+                </div>
+              )}
+
+              {/* Main Content Area */}
+              <div className="flex-1 max-w-xl">
+                {loading && (
+                  <GlassCard className="p-6">
+                    <LoadingDots />
+                    <p className="text-xs text-white/40 text-center mt-2">우주의 오늘을 불러오는 중...</p>
+                  </GlassCard>
+                )}
+
+                {error && !loading && (
+                  <GlassCard className="p-6 text-center">
+                    <p className="text-red-300 text-sm mb-2">{error}</p>
+                    <button
+                      onClick={() => fetchApod(selectedDate)}
+                      className="px-4 py-1.5 glass-light rounded-lg text-xs text-blue-200 hover:bg-blue-500/20 transition-colors"
+                    >
+                      다시 시도
+                    </button>
+                  </GlassCard>
+                )}
+
+                {!loading && !error && activeTab === 'home' && apod && activePanel && (
+                  <GlassCard className="p-5 max-h-[40vh] overflow-y-auto glow-border">
+                    {panelContent}
+                  </GlassCard>
+                )}
+
+                {!loading && activeTab === 'gallery' && (
+                  <GlassCard className="p-5 glow-border">
+                    <GalleryView cache={cache} onSelect={handleDateSelect} currentDate={selectedDate} />
+                  </GlassCard>
+                )}
+
+                {activeTab === 'info' && apod && (
+                  <GlassCard className="p-5 max-h-[60vh] overflow-y-auto glow-border">
+                    <div className="animate-slideUp space-y-4">
+                      <h2 className="text-xl font-semibold text-glow">{apod.title}</h2>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge>{apod.date}</Badge>
+                        {apod.copyright && <Badge className="text-yellow-200">&copy; {apod.copyright.trim()}</Badge>}
+                      </div>
+                      <p className="text-xs text-white/60 leading-relaxed">{apod.explanation}</p>
+                    </div>
+                  </GlassCard>
+                )}
+
+                {activeTab === 'settings' && (
+                  <GlassCard className="p-5 max-h-[60vh] overflow-y-auto glow-border">
+                    <SettingsView />
+                  </GlassCard>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom: Date Nav + Tab Bar */}
+            <div className="px-4 md:px-6 pb-3 pt-1 space-y-2">
+              {/* Date Navigation */}
+              {(activeTab === 'home' || activeTab === 'gallery') && (
+                <div className="glass rounded-2xl px-3 py-2 animate-slideUp">
+                  <DateNavBar
+                    selectedDate={selectedDate}
+                    onDateSelect={handleDateSelect}
+                    weekCenter={weekCenter}
+                    onWeekShift={handleWeekShift}
+                  />
+                </div>
+              )}
+
+              {/* Bottom Tab Bar */}
+              <div className="glass-heavy rounded-2xl px-2 py-1.5 animate-slideUp">
+                <div className="flex justify-around">
+                  {tabItems.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-300 min-w-[56px]
+                        ${activeTab === item.id
+                          ? 'text-blue-300 bg-blue-500/15'
+                          : 'text-white/35 hover:text-white/60'}`}
+                    >
+                      {item.icon}
+                      <span className="text-[9px] font-medium">{item.label}</span>
+                      {activeTab === item.id && (
+                        <div className="w-4 h-0.5 rounded-full bg-blue-400 mt-0.5"></div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 12. Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

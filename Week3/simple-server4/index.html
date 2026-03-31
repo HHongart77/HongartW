@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>비밀 메시지</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-8px); }
+      75% { transform: translateX(8px); }
+    }
+    .fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+    .shake { animation: shake 0.4s ease-in-out; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    function Card({ children, className = "" }) {
+      return (
+        <div className={`bg-white rounded-2xl shadow-xl p-8 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Input({ type = "text", value, onChange, placeholder, error, onKeyDown, inputRef }) {
+      return (
+        <input
+          ref={inputRef}
+          type={type}
+          value={value}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          className={`w-full px-4 py-3 text-center text-2xl tracking-[0.5em] border-2 rounded-xl outline-none transition-all duration-200 ${
+            error
+              ? "border-red-400 bg-red-50 focus:border-red-500"
+              : "border-gray-200 bg-gray-50 focus:border-indigo-500 focus:bg-white"
+          }`}
+          maxLength={4}
+          autoFocus
+        />
+      );
+    }
+
+    function Button({ children, onClick, variant = "primary", className = "" }) {
+      const base = "px-6 py-3 rounded-xl font-semibold transition-all duration-200 active:scale-95";
+      const variants = {
+        primary: "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200",
+        ghost: "bg-gray-100 text-gray-600 hover:bg-gray-200",
+      };
+      return (
+        <button onClick={onClick} className={`${base} ${variants[variant]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    // ========================================
+    // 📄 Page Components
+    // ========================================
+
+    function SecretPage() {
+      const [password, setPassword] = useState("");
+      const [unlocked, setUnlocked] = useState(false);
+      const [error, setError] = useState(false);
+      const [shaking, setShaking] = useState(false);
+      const inputRef = useRef(null);
+
+      const SECRET_PASSWORD = "1234";
+
+      const handleSubmit = () => {
+        if (password === SECRET_PASSWORD) {
+          setError(false);
+          setUnlocked(true);
+        } else {
+          setError(true);
+          setShaking(true);
+          setTimeout(() => setShaking(false), 400);
+          setTimeout(() => {
+            setPassword("");
+            setError(false);
+            inputRef.current?.focus();
+          }, 1000);
+        }
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === "Enter") handleSubmit();
+      };
+
+      const handleReset = () => {
+        setUnlocked(false);
+        setPassword("");
+        setError(false);
+      };
+
+      if (unlocked) {
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-4">
+            <Card className="max-w-md w-full text-center fade-in-up">
+              <div className="text-6xl mb-4">🎉</div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">접근 허가!</h2>
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-6 my-6">
+                <p className="text-lg text-emerald-800 font-medium leading-relaxed">
+                  🤫 축하합니다!<br/>
+                  당신은 비밀 메시지를 발견했습니다.<br/><br/>
+                  <span className="text-2xl font-bold text-emerald-600">
+                    "코딩은 마법이다 ✨"
+                  </span>
+                </p>
+              </div>
+              <Button variant="ghost" onClick={handleReset}>
+                🔒 다시 잠그기
+              </Button>
+            </Card>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center p-4">
+          <Card className={`max-w-md w-full text-center ${shaking ? "shake" : ""}`}>
+            <div className="text-6xl mb-4">🔒</div>
+            <h1 className="text-2xl font-bold text-gray-800 mb-2">비밀 메시지</h1>
+            <p className="text-gray-500 mb-8">비밀번호를 입력하세요</p>
+
+            <div className="space-y-4">
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value.replace(/\D/g, ""));
+                  setError(false);
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder="••••"
+                error={error}
+                inputRef={inputRef}
+              />
+
+              {error && (
+                <p className="text-red-500 text-sm font-medium">
+                  ❌ 비밀번호가 틀렸습니다
+                </p>
+              )}
+
+              <Button onClick={handleSubmit} className="w-full">
+                🔓 확인
+              </Button>
+            </div>
+
+            <p className="text-xs text-gray-400 mt-6">힌트: 숫자 4자리</p>
+          </Card>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App Component
+    // ========================================
+
+    function App() {
+      return <SecretPage />;
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

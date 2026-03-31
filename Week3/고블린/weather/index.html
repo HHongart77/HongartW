@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weather Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #080c10;
+      color: #fff;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .bg-scene {
+      position: fixed;
+      inset: 0;
+      background: #080c10;
+      z-index: 0;
+    }
+    .bg-scene::before {
+      content: '';
+      position: absolute;
+      left: -120px;
+      top: 0;
+      width: 340px;
+      height: 100%;
+      background: linear-gradient(180deg, rgba(16,185,129,0.13) 0%, rgba(16,185,129,0.04) 60%, transparent 100%);
+      filter: blur(40px);
+    }
+    .bg-scene::after {
+      content: '';
+      position: absolute;
+      right: -120px;
+      top: 0;
+      width: 340px;
+      height: 100%;
+      background: linear-gradient(180deg, rgba(16,185,129,0.10) 0%, rgba(16,185,129,0.03) 60%, transparent 100%);
+      filter: blur(40px);
+    }
+    .card {
+      background: rgba(15, 20, 28, 0.92);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 16px;
+    }
+    .card-hover {
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .card-hover:hover {
+      border-color: rgba(255,255,255,0.13);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.04);
+    }
+    .navbar {
+      background: rgba(10, 14, 20, 0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    .nav-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+      color: rgba(255,255,255,0.6);
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .nav-btn:hover { background: rgba(255,255,255,0.12); }
+    .nav-btn.active {
+      background: rgba(255,255,255,0.14);
+      color: #fff;
+      border-color: rgba(255,255,255,0.15);
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: rgba(255,255,255,0.45);
+      padding: 6px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+    .tab-btn:hover:not(.active) {
+      color: rgba(255,255,255,0.7);
+    }
+    .badge-up {
+      background: rgba(34,197,94,0.15);
+      color: #22c55e;
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .badge-down {
+      background: rgba(239,68,68,0.15);
+      color: #ef4444;
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .accent-btn {
+      background: #FF6500;
+      border: none;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: white;
+      font-size: 14px;
+      transition: opacity 0.2s;
+    }
+    .accent-btn:hover { opacity: 0.85; }
+    .search-input {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 10px;
+      color: #fff;
+      outline: none;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-family: inherit;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .search-input::placeholder { color: rgba(255,255,255,0.3); }
+    .search-input:focus {
+      border-color: rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.09);
+    }
+    .weather-icon-bg {
+      background: radial-gradient(circle, rgba(255,165,0,0.18) 0%, transparent 70%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .sparkline-bar {
+      background: rgba(34,197,94,0.25);
+      border-radius: 2px;
+      width: 4px;
+      transition: height 0.3s;
+    }
+    .sparkline-bar.active { background: #22c55e; }
+    .gauge-track {
+      fill: none;
+      stroke: rgba(255,255,255,0.08);
+      stroke-width: 10;
+    }
+    .gauge-fill {
+      fill: none;
+      stroke-width: 10;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s ease;
+    }
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      background: #22c55e;
+      border-radius: 50%;
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.7); }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    .float-anim { animation: float 3s ease-in-out infinite; }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeInUp 0.45s ease-out forwards; }
+    .fade-in-1 { animation-delay: 0.05s; opacity: 0; }
+    .fade-in-2 { animation-delay: 0.12s; opacity: 0; }
+    .fade-in-3 { animation-delay: 0.20s; opacity: 0; }
+    .fade-in-4 { animation-delay: 0.28s; opacity: 0; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    .spin { animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+    const API_KEY = 'f4f2f47b6251a8d2574509929fc7ba13';
+    const BASE_URL = 'https://api.openweathermap.org/data/2.5';
+
+    function getWeatherEmoji(id) {
+      if (!id) return '🌡️';
+      if (id >= 200 && id < 300) return '⛈️';
+      if (id >= 300 && id < 400) return '🌦️';
+      if (id >= 500 && id < 600) return '🌧️';
+      if (id >= 600 && id < 700) return '❄️';
+      if (id >= 700 && id < 800) return '🌫️';
+      if (id === 800) return '☀️';
+      if (id === 801) return '🌤️';
+      if (id === 802) return '⛅';
+      if (id >= 803) return '☁️';
+      return '🌡️';
+    }
+
+    function getWeatherColor(id) {
+      if (!id) return '#60a5fa';
+      if (id >= 200 && id < 300) return '#818cf8';
+      if (id >= 300 && id < 600) return '#60a5fa';
+      if (id >= 600 && id < 700) return '#bae6fd';
+      if (id >= 700 && id < 800) return '#94a3b8';
+      if (id === 800) return '#fbbf24';
+      if (id <= 802) return '#93c5fd';
+      return '#94a3b8';
+    }
+
+    function processForecast(forecastData) {
+      const daily = {};
+      const todayStr = new Date().toDateString();
+      forecastData.list.forEach(item => {
+        const date = new Date(item.dt * 1000);
+        const dateStr = date.toDateString();
+        if (dateStr === todayStr) return;
+        const dateKey = date.toLocaleDateString('ko-KR', { weekday: 'short', month: 'numeric', day: 'numeric' });
+        if (!daily[dateKey]) daily[dateKey] = { temps: [], ids: [], descriptions: [] };
+        daily[dateKey].temps.push(item.main.temp);
+        daily[dateKey].ids.push(item.weather[0].id);
+        daily[dateKey].descriptions.push(item.weather[0].description);
+      });
+      return Object.entries(daily).slice(0, 5).map(([day, data]) => {
+        const midId = data.ids[Math.floor(data.ids.length / 2)];
+        const midDesc = data.descriptions[Math.floor(data.descriptions.length / 2)];
+        return {
+          day,
+          icon: getWeatherEmoji(midId),
+          color: getWeatherColor(midId),
+          high: Math.round(Math.max(...data.temps)),
+          low: Math.round(Math.min(...data.temps)),
+          condition: midDesc,
+          id: midId,
+        };
+      });
+    }
+
+    function getCurrentPosition() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) reject(new Error('위치 정보 미지원'));
+        else navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error('위치 권한 거부')));
+      });
+    }
+
+    async function fetchWeatherByCoords(lat, lon) {
+      const [r1, r2] = await Promise.all([
+        fetch(`${BASE_URL}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`),
+        fetch(`${BASE_URL}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`),
+      ]);
+      if (!r1.ok) throw new Error('날씨 데이터 오류');
+      return parseWeather(await r1.json(), await r2.json());
+    }
+
+    async function fetchWeather(city) {
+      const geoRes = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${API_KEY}`);
+      if (!geoRes.ok) throw new Error('도시 검색 오류');
+      const geoData = await geoRes.json();
+      if (!geoData.length) throw new Error(`"${city}" 도시를 찾을 수 없습니다`);
+      const { lat, lon } = geoData[0];
+      return fetchWeatherByCoords(lat, lon);
+    }
+
+    function parseWeather(current, forecast) {
+      return {
+        city: current.name,
+        country: current.sys.country,
+        temp: Math.round(current.main.temp),
+        feelsLike: Math.round(current.main.feels_like),
+        condition: current.weather[0].description,
+        icon: getWeatherEmoji(current.weather[0].id),
+        color: getWeatherColor(current.weather[0].id),
+        weatherId: current.weather[0].id,
+        humidity: current.main.humidity,
+        wind: current.wind.speed.toFixed(1),
+        windDeg: current.wind.deg || 0,
+        visibility: current.visibility ? (current.visibility / 1000).toFixed(1) : 'N/A',
+        pressure: current.main.pressure,
+        high: Math.round(current.main.temp_max),
+        low: Math.round(current.main.temp_min),
+        forecast: processForecast(forecast),
+        updatedAt: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+      };
+    }
+
+    // ── Sparkline bars (mini bar chart) ──────────────────────────
+    function Sparkline({ values = [], color = '#22c55e', height = 36 }) {
+      if (!values.length) return null;
+      const max = Math.max(...values);
+      const min = Math.min(...values);
+      const range = max - min || 1;
+      return (
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height }}>
+          {values.map((v, i) => {
+            const pct = ((v - min) / range) * 0.75 + 0.25;
+            const isLast = i === values.length - 1;
+            return (
+              <div
+                key={i}
+                style={{
+                  width: 4,
+                  height: `${pct * 100}%`,
+                  background: isLast ? color : `${color}55`,
+                  borderRadius: 2,
+                  transition: 'height 0.3s',
+                }}
+              />
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ── Gauge arc for humidity / wind ──────────────────────────
+    function GaugeArc({ value, max, color, size = 110, label }) {
+      const r = (size - 16) / 2;
+      const cx = size / 2;
+      const cy = size / 2 + size * 0.1;
+      const startAngle = -220;
+      const totalAngle = 260;
+      const pct = Math.min(value / max, 1);
+      const deg = startAngle + totalAngle * pct;
+
+      const toRad = d => (d * Math.PI) / 180;
+      const arcPath = (a1, a2, rr) => {
+        const x1 = cx + rr * Math.cos(toRad(a1));
+        const y1 = cy + rr * Math.sin(toRad(a1));
+        const x2 = cx + rr * Math.cos(toRad(a2));
+        const y2 = cy + rr * Math.sin(toRad(a2));
+        const large = a2 - a1 > 180 ? 1 : 0;
+        return `M ${x1} ${y1} A ${rr} ${rr} 0 ${large} 1 ${x2} ${y2}`;
+      };
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <svg width={size} height={size * 0.85} viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible' }}>
+            <path d={arcPath(startAngle, startAngle + totalAngle, r)} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={8} strokeLinecap="round" />
+            {pct > 0 && (
+              <path d={arcPath(startAngle, deg, r)} fill="none" stroke={color} strokeWidth={8} strokeLinecap="round" />
+            )}
+            <text x={cx} y={cy + 4} textAnchor="middle" fill="#fff" fontSize={size * 0.2} fontWeight={700} fontFamily="Inter">{value}</text>
+            <text x={cx} y={cy + 18} textAnchor="middle" fill="rgba(255,255,255,0.45)" fontSize={size * 0.11} fontFamily="Inter">{label}</text>
+          </svg>
+        </div>
+      );
+    }
+
+    // ── Stat card (top right area) ──────────────────────────────
+    function StatCard({ title, badge, badgeType, value, unit, sparkValues, color, className = '' }) {
+      return (
+        <div className={`card card-hover p-4 ${className}`} style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>{title}</span>
+            {badge && (
+              <span className={badgeType === 'up' ? 'badge-up' : 'badge-down'}>
+                {badgeType === 'up' ? '↑' : '↓'} {badge}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <div>
+              <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-1px' }}>{value}</span>
+              {unit && <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginLeft: 3 }}>{unit}</span>}
+            </div>
+            {sparkValues && <Sparkline values={sparkValues} color={color || '#22c55e'} height={36} />}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Wind compass ──────────────────────────────────────────
+    function WindCompass({ deg, speed }) {
+      const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+      const dir = dirs[Math.round(deg / 45) % 8];
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ position: 'relative', width: 60, height: 60 }}>
+            <svg width={60} height={60}>
+              <circle cx={30} cy={30} r={26} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={2} />
+              {[0,90,180,270].map(d => {
+                const rad = (d - 90) * Math.PI / 180;
+                return <line key={d} x1={30 + 20*Math.cos(rad)} y1={30 + 20*Math.sin(rad)} x2={30 + 26*Math.cos(rad)} y2={30 + 26*Math.sin(rad)} stroke="rgba(255,255,255,0.2)" strokeWidth={1.5} />;
+              })}
+              <g transform={`rotate(${deg}, 30, 30)`}>
+                <polygon points="30,8 33,30 30,26 27,30" fill="#22c55e" />
+                <polygon points="30,52 33,30 30,34 27,30" fill="rgba(255,255,255,0.2)" />
+              </g>
+              <circle cx={30} cy={30} r={3} fill="rgba(255,255,255,0.4)" />
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{speed}<span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginLeft: 2 }}>m/s</span></div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{dir} 방향</div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Forecast row card ─────────────────────────────────────
+    function ForecastRow({ day, icon, high, low, condition, color }) {
+      const tempRange = high - low || 1;
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ fontSize: 22, width: 30, textAlign: 'center' }}>{icon}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.75)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{day}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, textTransform: 'capitalize' }}>{condition}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>{low}°</span>
+            <div style={{ width: 48, height: 3, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ width: '60%', height: '100%', background: color || '#fbbf24', borderRadius: 2 }} />
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{high}°</span>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Main App ────────────────────────────────────────────────
+    function App() {
+      const [query, setQuery] = useState('');
+      const [weather, setWeather] = useState(null);
+      const [error, setError] = useState('');
+      const [loading, setLoading] = useState(true);
+      const [activeTab, setActiveTab] = useState(0);
+      const inputRef = useRef(null);
+
+      const cities = ['현재 위치', 'Seoul', 'Tokyo', 'New York'];
+
+      const load = useCallback(async (fn) => {
+        setLoading(true);
+        setError('');
+        try {
+          const data = await fn();
+          setWeather(data);
+        } catch (e) {
+          setError(e.message);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => {
+        load(async () => {
+          try {
+            const pos = await getCurrentPosition();
+            return fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude);
+          } catch {
+            return fetchWeather('Seoul');
+          }
+        });
+      }, []);
+
+      const handleSearch = useCallback(() => {
+        if (!query.trim()) return;
+        load(() => fetchWeather(query.trim()));
+      }, [query, load]);
+
+      const handleLocation = useCallback(() => {
+        load(async () => {
+          const pos = await getCurrentPosition();
+          return fetchWeatherByCoords(pos.coords.latitude, pos.coords.longitude);
+        });
+      }, [load]);
+
+      const handleCityTab = useCallback((idx) => {
+        setActiveTab(idx);
+        if (idx === 0) {
+          handleLocation();
+        } else {
+          load(() => fetchWeather(cities[idx]));
+        }
+      }, [load, handleLocation]);
+
+      // Fake sparkline data based on weather
+      const tempSpark = useMemo(() => {
+        if (!weather) return [];
+        const base = weather.temp;
+        return [base - 3, base - 1, base + 1, base, base + 2, base - 1, base];
+      }, [weather]);
+
+      const humidSpark = useMemo(() => {
+        if (!weather) return [];
+        const base = weather.humidity;
+        return [base - 5, base - 2, base + 3, base - 1, base + 2, base - 3, base];
+      }, [weather]);
+
+      const windSpark = useMemo(() => {
+        if (!weather) return [];
+        const base = parseFloat(weather.wind);
+        return [base * 0.8, base * 1.1, base * 0.9, base * 1.2, base * 0.95, base * 1.05, base];
+      }, [weather]);
+
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      const dateStr = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+
+      return (
+        <div style={{ minHeight: '100vh', position: 'relative', zIndex: 1 }}>
+          <div className="bg-scene" />
+
+          {/* ── Navbar ─────────────────────────────── */}
+          <nav className="navbar" style={{ position: 'sticky', top: 0, zIndex: 50, display: 'flex', alignItems: 'center', padding: '0 24px', height: 60, gap: 12 }}>
+            {/* Logo */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 16 }}>
+              <div style={{ width: 36, height: 36, background: '#FF6500', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff' }}>
+                ✦
+              </div>
+            </div>
+
+            {/* Nav icons */}
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="nav-btn active" title="대시보드">🏠</button>
+              <button className="nav-btn" title="검색">🔍</button>
+              <button className="nav-btn" title="설정">⚙️</button>
+              <button className="nav-btn" title="알림">🔔</button>
+            </div>
+
+            {/* Search bar */}
+            <div style={{ flex: 1, maxWidth: 360, margin: '0 auto', display: 'flex', gap: 6 }}>
+              <input
+                ref={inputRef}
+                className="search-input"
+                style={{ flex: 1 }}
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                placeholder="도시 이름 검색 (한글/영문)"
+              />
+              <button
+                onClick={handleSearch}
+                disabled={loading}
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 10,
+                  color: '#fff',
+                  padding: '0 16px',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  fontWeight: 500,
+                  opacity: loading ? 0.5 : 1,
+                }}
+              >
+                {loading ? <span className="spin" style={{ display: 'inline-block', width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%' }} /> : '검색'}
+              </button>
+            </div>
+
+            {/* Right side */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{timeStr}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{dateStr}</div>
+              </div>
+              <button className="accent-btn" onClick={handleLocation} title="현재 위치">📍</button>
+            </div>
+          </nav>
+
+          {/* ── Content ─────────────────────────────── */}
+          <div style={{ padding: '24px 24px 32px', maxWidth: 1280, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+
+            {/* Title row */}
+            <div className="fade-in" style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', marginBottom: 4 }}>
+                    Weather Dashboard
+                  </h1>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
+                    실시간 기상 정보 및 예보 분석
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="live-dot" />
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>실시간 데이터</span>
+                </div>
+              </div>
+            </div>
+
+            {/* City tabs */}
+            <div className="fade-in fade-in-1" style={{ display: 'flex', gap: 4, marginBottom: 22 }}>
+              {cities.map((c, i) => (
+                <button key={c} className={`tab-btn${activeTab === i ? ' active' : ''}`} onClick={() => handleCityTab(i)}>
+                  {c}
+                </button>
+              ))}
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12, padding: '10px 16px', fontSize: 13, color: '#fca5a5', marginBottom: 18 }}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            {loading && !weather ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, gap: 14 }}>
+                <div className="spin" style={{ width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#22c55e', borderRadius: '50%' }} />
+                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>날씨 정보를 불러오는 중...</p>
+              </div>
+            ) : weather ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
+
+                {/* ── LEFT COLUMN ─────────────── */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                  {/* Main weather card */}
+                  <div className="card fade-in fade-in-2" style={{ padding: 28, position: 'relative', overflow: 'hidden' }}>
+                    {/* Background glow */}
+                    <div style={{ position: 'absolute', top: -60, right: -40, width: 220, height: 220, background: `radial-gradient(circle, ${weather.color}30 0%, transparent 70%)`, pointerEvents: 'none' }} />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      {/* Left: temp info */}
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>{weather.country}</span>
+                          <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
+                          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>업데이트 {weather.updatedAt}</span>
+                        </div>
+                        <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 20 }}>{weather.city}</h2>
+
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                          <div className="float-anim" style={{ fontSize: 72, lineHeight: 1 }}>{weather.icon}</div>
+                          <div>
+                            <div style={{ fontSize: 72, fontWeight: 300, lineHeight: 1, letterSpacing: '-3px' }}>
+                              {weather.temp}<span style={{ fontSize: 32, color: 'rgba(255,255,255,0.4)', fontWeight: 400 }}>°C</span>
+                            </div>
+                            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', marginTop: 6, textTransform: 'capitalize' }}>{weather.condition}</div>
+                            <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>최고 <strong style={{ color: '#fff' }}>{weather.high}°</strong></span>
+                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>|</span>
+                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>최저 <strong style={{ color: '#fff' }}>{weather.low}°</strong></span>
+                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>|</span>
+                              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>체감 <strong style={{ color: '#fff' }}>{weather.feelsLike}°</strong></span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stat cards row */}
+                  <div className="fade-in fade-in-3" style={{ display: 'flex', gap: 12 }}>
+                    <StatCard
+                      title="기온"
+                      badge={`${weather.high - weather.low}°C`}
+                      badgeType="up"
+                      value={weather.temp}
+                      unit="°C"
+                      sparkValues={tempSpark}
+                      color="#fbbf24"
+                    />
+                    <StatCard
+                      title="습도"
+                      badge={weather.humidity > 70 ? '높음' : '적정'}
+                      badgeType={weather.humidity > 70 ? 'down' : 'up'}
+                      value={weather.humidity}
+                      unit="%"
+                      sparkValues={humidSpark}
+                      color="#60a5fa"
+                    />
+                    <StatCard
+                      title="풍속"
+                      badge={parseFloat(weather.wind) > 10 ? '강풍' : '약풍'}
+                      badgeType={parseFloat(weather.wind) > 10 ? 'down' : 'up'}
+                      value={weather.wind}
+                      unit="m/s"
+                      sparkValues={windSpark}
+                      color="#22c55e"
+                    />
+                  </div>
+
+                  {/* Detail panels row */}
+                  <div className="fade-in fade-in-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+
+                    {/* Wind detail */}
+                    <div className="card card-hover" style={{ padding: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>풍향 & 풍속</span>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>🌬️</span>
+                      </div>
+                      <WindCompass deg={weather.windDeg} speed={weather.wind} />
+                    </div>
+
+                    {/* Humidity gauge */}
+                    <div className="card card-hover" style={{ padding: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>습도 현황</span>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>💧</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <GaugeArc value={weather.humidity} max={100} color="#60a5fa" size={110} label="%" />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>기압 {weather.pressure} hPa</span>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>가시거리 {weather.visibility}km</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── RIGHT COLUMN ─────────────── */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                  {/* 5-day forecast */}
+                  <div className="card fade-in fade-in-2" style={{ padding: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>5일 예보</span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>주간</span>
+                    </div>
+                    {weather.forecast.length > 0 ? (
+                      weather.forecast.map((f, i) => (
+                        <ForecastRow key={i} {...f} />
+                      ))
+                    ) : (
+                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', textAlign: 'center', padding: '20px 0' }}>예보 데이터 없음</p>
+                    )}
+                  </div>
+
+                  {/* AI Insights panel */}
+                  <div className="card fade-in fade-in-3" style={{ padding: 20 }}>
+                    <div style={{ marginBottom: 12 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>날씨 인사이트</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {[
+                        {
+                          text: weather.humidity > 70
+                            ? '높은 습도로 불쾌지수가 상승할 수 있습니다'
+                            : '쾌적한 습도 수준입니다',
+                          strong: weather.humidity > 70 ? '불쾌지수 주의' : '쾌적',
+                          type: weather.humidity > 70 ? 'warn' : 'good',
+                        },
+                        {
+                          text: parseFloat(weather.wind) > 10
+                            ? '강한 바람이 부므로 외출 시 주의하세요'
+                            : '바람이 약해 야외 활동에 적합합니다',
+                          strong: parseFloat(weather.wind) > 10 ? '강풍 주의' : '야외 활동 좋음',
+                          type: parseFloat(weather.wind) > 10 ? 'warn' : 'good',
+                        },
+                        {
+                          text: `일교차 ${weather.high - weather.low}°C${weather.high - weather.low > 10 ? ', 얇은 겉옷을 준비하세요' : ', 일교차가 크지 않습니다'}`,
+                          strong: weather.high - weather.low > 10 ? '일교차 큼' : '일교차 적당',
+                          type: weather.high - weather.low > 10 ? 'warn' : 'good',
+                        },
+                      ].map((ins, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                          <div style={{
+                            width: 6, height: 6, borderRadius: '50%', marginTop: 5, flexShrink: 0,
+                            background: ins.type === 'good' ? '#22c55e' : '#f59e0b'
+                          }} />
+                          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+                            <strong style={{ color: ins.type === 'good' ? '#22c55e' : '#f59e0b' }}>{ins.strong}</strong> {ins.text}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', gap: 8 }}>
+                      <div style={{ fontSize: 22 }}>🤖</div>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: 3 }}>AI 요약</div>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5 }}>
+                          {weather.city} 현재 기온 {weather.temp}°C, {weather.condition}. 체감온도 {weather.feelsLike}°C로 {Math.abs(weather.feelsLike - weather.temp) > 3 ? '체감과 실제 온도 차이가 큽니다' : '실제 온도와 비슷합니다'}.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer attribution */}
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '4px 0' }}>
+                    OpenWeatherMap API 제공
+                  </p>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

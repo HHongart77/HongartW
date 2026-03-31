@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>포켓몬 도감 검색</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.4s ease-out; }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-4px); }
+      40%, 80% { transform: translateX(4px); }
+    }
+    .shake { animation: shake 0.4s ease-in-out; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    // ========================================
+    // 📡 API 설정
+    // ========================================
+    const API_BASE_URL = "/api";
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Card({ children, className = "" }) {
+      return (
+        <div className={`bg-white rounded-2xl shadow-lg overflow-hidden ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Badge({ label, className = "" }) {
+      return (
+        <span className={`text-white text-xs font-bold px-3 py-1 rounded-full ${className}`}>
+          {label}
+        </span>
+      );
+    }
+
+    function StatBar({ label, value, max = 150, color }) {
+      const percentage = Math.min((value / max) * 100, 100);
+      return (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500 w-16 text-right">{label}</span>
+          <span className="text-sm font-bold w-8 text-right">{value}</span>
+          <div className="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ease-out ${color}`}
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 PokemonCard Component
+    // ========================================
+    function PokemonCard({ pokemon }) {
+      return (
+        <Card className="fade-in max-w-md mx-auto">
+          {/* 헤더 그라데이션 영역 */}
+          <div className={`bg-gradient-to-br ${pokemon.color} p-6 relative`}>
+            <span className="absolute top-4 right-4 text-white/30 text-5xl font-extrabold">
+              #{String(pokemon.id).padStart(3, "0")}
+            </span>
+            <img
+              src={pokemon.image}
+              alt={pokemon.name}
+              className="w-48 h-48 mx-auto drop-shadow-xl object-contain"
+            />
+          </div>
+
+          {/* 정보 영역 */}
+          <div className="p-6 space-y-4">
+            {/* 이름 & 타입 */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-extrabold text-gray-800">{pokemon.name}</h2>
+                <p className="text-sm text-gray-400">{pokemon.nameEn}</p>
+              </div>
+              <div className="flex gap-2">
+                {pokemon.types.map((type, i) => (
+                  <Badge key={type} label={type} className={pokemon.typeBg[i]} />
+                ))}
+              </div>
+            </div>
+
+            {/* 설명 */}
+            <p className="text-gray-600 text-sm leading-relaxed bg-gray-50 rounded-xl p-3">
+              {pokemon.description}
+            </p>
+
+            {/* 신체 정보 */}
+            <div className="flex gap-4">
+              <div className="flex-1 text-center bg-gray-50 rounded-xl p-3">
+                <p className="text-xs text-gray-400">키</p>
+                <p className="text-lg font-bold text-gray-700">{pokemon.height} m</p>
+              </div>
+              <div className="flex-1 text-center bg-gray-50 rounded-xl p-3">
+                <p className="text-xs text-gray-400">몸무게</p>
+                <p className="text-lg font-bold text-gray-700">{pokemon.weight} kg</p>
+              </div>
+            </div>
+
+            {/* 스탯 */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-bold text-gray-700">기본 스탯</h3>
+              <StatBar label="HP" value={pokemon.hp} color="bg-green-400" />
+              <StatBar label="공격" value={pokemon.attack} color="bg-red-400" />
+              <StatBar label="방어" value={pokemon.defense} color="bg-blue-400" />
+              <StatBar label="스피드" value={pokemon.speed} color="bg-yellow-400" />
+            </div>
+          </div>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 📄 PokemonListCard Component
+    // ========================================
+    function PokemonListCard({ pokemon, onClick }) {
+      return (
+        <button
+          onClick={() => onClick(pokemon)}
+          className="fade-in bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-200 hover:-translate-y-1 p-4 flex items-center gap-4 w-full text-left"
+        >
+          <div className={`bg-gradient-to-br ${pokemon.color} rounded-xl p-2 w-16 h-16 flex items-center justify-center`}>
+            <img src={pokemon.image} alt={pokemon.name} className="w-12 h-12 object-contain" />
+          </div>
+          <div className="flex-1">
+            <p className="text-xs text-gray-400 font-mono">#{String(pokemon.id).padStart(3, "0")}</p>
+            <p className="font-bold text-gray-800">{pokemon.name}</p>
+            <div className="flex gap-1 mt-1">
+              {pokemon.types.map((type, i) => (
+                <Badge key={type} label={type} className={`${pokemon.typeBg[i]} !text-[10px] !px-2 !py-0.5`} />
+              ))}
+            </div>
+          </div>
+          <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      );
+    }
+
+    // ========================================
+    // 🚀 App Component
+    // ========================================
+    function App() {
+      const [query, setQuery] = useState("");
+      const [allPokemon, setAllPokemon] = useState([]);
+      const [results, setResults] = useState([]);
+      const [selected, setSelected] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [noResult, setNoResult] = useState(false);
+      const inputRef = useRef(null);
+      const debounceRef = useRef(null);
+
+      // 초기 전체 목록 로드
+      useEffect(() => {
+        fetch(`${API_BASE_URL}/pokemon`)
+          .then((res) => res.json())
+          .then((data) => {
+            setAllPokemon(data);
+            setLoading(false);
+          })
+          .catch(() => setLoading(false));
+      }, []);
+
+      // 검색어 변경 시 API 호출 (디바운스)
+      useEffect(() => {
+        setSelected(null);
+        if (!query.trim()) {
+          setResults([]);
+          setNoResult(false);
+          return;
+        }
+
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+          fetch(`${API_BASE_URL}/pokemon?q=${encodeURIComponent(query.trim())}`)
+            .then((res) => res.json())
+            .then((data) => {
+              setResults(data);
+              setNoResult(data.length === 0);
+            });
+        }, 300);
+
+        return () => clearTimeout(debounceRef.current);
+      }, [query]);
+
+      const handleSearch = (e) => {
+        e.preventDefault();
+        if (results.length === 1) {
+          setSelected(results[0]);
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-red-50 via-white to-gray-100">
+          {/* 헤더 */}
+          <header className="bg-gradient-to-r from-red-500 to-red-600 shadow-lg">
+            <div className="max-w-2xl mx-auto px-4 py-6 text-center">
+              <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                ⚡ 포켓몬 도감
+              </h1>
+              <p className="text-red-100 text-sm mt-1">이름 또는 번호로 포켓몬을 검색하세요</p>
+            </div>
+          </header>
+
+          <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+            {/* 검색 바 */}
+            <form onSubmit={handleSearch} className="relative">
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="포켓몬 이름 또는 번호 입력 (예: 피카츄, 25)"
+                className="w-full px-5 py-4 pr-14 rounded-2xl border-2 border-gray-200 focus:border-red-400 focus:outline-none text-lg shadow-sm transition-colors"
+                aria-label="포켓몬 검색"
+              />
+              <button
+                type="submit"
+                className="absolute right-3 top-1/2 -translate-y-1/2 bg-red-500 hover:bg-red-600 text-white rounded-xl p-2.5 transition-colors"
+                aria-label="검색"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </button>
+            </form>
+
+            {/* 선택된 포켓몬 상세 카드 */}
+            {selected && (
+              <div>
+                <button
+                  onClick={() => setSelected(null)}
+                  className="text-sm text-red-500 hover:text-red-600 font-medium mb-3 flex items-center gap-1"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  목록으로 돌아가기
+                </button>
+                <PokemonCard pokemon={selected} />
+              </div>
+            )}
+
+            {/* 검색 결과 목록 */}
+            {!selected && results.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500">{results.length}개의 포켓몬을 찾았습니다</p>
+                {results.map((p) => (
+                  <PokemonListCard key={p.id} pokemon={p} onClick={setSelected} />
+                ))}
+              </div>
+            )}
+
+            {/* 검색 결과 없음 */}
+            {!selected && noResult && (
+              <div className={`text-center py-12 shake`}>
+                <p className="text-6xl mb-4">😢</p>
+                <p className="text-gray-500 text-lg">
+                  "<span className="font-bold text-gray-700">{query}</span>"에 해당하는 포켓몬을 찾을 수 없습니다.
+                </p>
+                <p className="text-gray-400 text-sm mt-2">이름 또는 번호를 확인해 주세요</p>
+              </div>
+            )}
+
+            {/* 로딩 상태 */}
+            {loading && (
+              <div className="text-center py-12">
+                <p className="text-4xl mb-3 animate-bounce">⚡</p>
+                <p className="text-gray-500">포켓몬 데이터를 불러오는 중...</p>
+              </div>
+            )}
+
+            {/* 초기 상태 - 전체 목록 */}
+            {!selected && !query.trim() && !loading && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500">등록된 포켓몬 ({allPokemon.length})</p>
+                {allPokemon.map((p) => (
+                  <PokemonListCard key={p.id} pokemon={p} onClick={setSelected} />
+                ))}
+              </div>
+            )}
+          </main>
+
+          {/* 푸터 */}
+          <footer className="text-center py-6 text-gray-400 text-xs">
+            포켓몬 도감 앱 &copy; 2026
+          </footer>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🔌 Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

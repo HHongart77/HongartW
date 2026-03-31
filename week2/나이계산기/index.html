@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>나이 계산기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Noto Sans KR', sans-serif; }
+    .fade-in {
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .pulse-ring {
+      animation: pulseRing 2s ease-in-out infinite;
+    }
+    @keyframes pulseRing {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3); }
+      50% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
+    }
+    .stagger-1 { animation-delay: 0.1s; }
+    .stagger-2 { animation-delay: 0.2s; }
+    .stagger-3 { animation-delay: 0.3s; }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-50 via-white to-purple-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-white rounded-2xl shadow-lg border border-gray-100 p-6 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Button({ children, onClick, variant = 'primary', size = 'md', disabled = false, className = '' }) {
+      const base = 'font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer';
+      const variants = {
+        primary: 'bg-indigo-600 hover:bg-indigo-700 text-white focus:ring-indigo-500 shadow-md hover:shadow-lg',
+        secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-700 focus:ring-gray-400',
+        ghost: 'bg-transparent hover:bg-gray-100 text-gray-600 focus:ring-gray-300',
+      };
+      const sizes = {
+        sm: 'px-4 py-2 text-sm',
+        md: 'px-6 py-3 text-base',
+        lg: 'px-8 py-4 text-lg',
+      };
+      return (
+        <button
+          onClick={onClick}
+          disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    // ========================================
+    // 🎂 Result Display Components
+    // ========================================
+
+    function AgeCard({ age, label, sublabel, color, icon }) {
+      const colorMap = {
+        indigo: {
+          bg: 'bg-indigo-50',
+          border: 'border-indigo-200',
+          num: 'text-indigo-600',
+          unit: 'text-indigo-400',
+          label: 'text-indigo-700',
+          sublabel: 'text-indigo-400',
+          badge: 'bg-indigo-100 text-indigo-700',
+        },
+        emerald: {
+          bg: 'bg-emerald-50',
+          border: 'border-emerald-200',
+          num: 'text-emerald-600',
+          unit: 'text-emerald-400',
+          label: 'text-emerald-700',
+          sublabel: 'text-emerald-400',
+          badge: 'bg-emerald-100 text-emerald-700',
+        },
+        amber: {
+          bg: 'bg-amber-50',
+          border: 'border-amber-200',
+          num: 'text-amber-600',
+          unit: 'text-amber-400',
+          label: 'text-amber-700',
+          sublabel: 'text-amber-400',
+          badge: 'bg-amber-100 text-amber-700',
+        },
+      };
+      const c = colorMap[color];
+
+      return (
+        <div className={`${c.bg} border ${c.border} rounded-xl p-4 text-center flex flex-col items-center`}>
+          <span className={`inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full mb-2 ${c.badge}`}>
+            {icon} {label}
+          </span>
+          <div className="flex items-baseline justify-center gap-1">
+            <span className={`text-4xl font-bold ${c.num}`}>{age}</span>
+            <span className={`text-lg font-semibold ${c.unit}`}>세</span>
+          </div>
+          <p className={`text-xs mt-1.5 ${c.sublabel} leading-snug`}>{sublabel}</p>
+        </div>
+      );
+    }
+
+    function BirthdayCountdown({ daysUntil, nextBirthdayDate }) {
+      const isBirthdayToday = daysUntil === 0;
+
+      if (isBirthdayToday) {
+        return (
+          <div className="fade-in text-center bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-5 border border-yellow-200">
+            <p className="text-3xl mb-2">🎉🎂🎉</p>
+            <p className="text-xl font-bold text-orange-600">오늘이 생일입니다!</p>
+            <p className="text-orange-400 text-sm mt-1">생일 축하합니다!</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="fade-in text-center bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-5 border border-purple-100">
+          <p className="text-gray-500 text-sm mb-1">다음 생일까지</p>
+          <div className="flex items-baseline justify-center gap-1">
+            <span className="text-4xl font-bold text-purple-600">{daysUntil}</span>
+            <span className="text-lg font-semibold text-purple-400">일 남음</span>
+          </div>
+          <p className="text-gray-400 text-xs mt-2">{nextBirthdayDate}</p>
+        </div>
+      );
+    }
+
+    function DetailInfo({ label, value }) {
+      return (
+        <div className="flex justify-between items-center py-2 border-b border-gray-50 last:border-b-0">
+          <span className="text-gray-500 text-sm">{label}</span>
+          <span className="text-gray-800 font-medium text-sm">{value}</span>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 App Component
+    // ========================================
+
+    function App() {
+      const [birthDate, setBirthDate] = useState('');
+      const today = new Date(2026, 2, 29); // 2026-03-29
+
+      const result = useMemo(() => {
+        if (!birthDate) return null;
+
+        const birth = new Date(birthDate + 'T00:00:00');
+        if (isNaN(birth.getTime())) return null;
+        if (birth > today) return { error: '생년월일은 오늘 이전이어야 합니다.' };
+
+        const birthYear = birth.getFullYear();
+        const birthMonth = birth.getMonth();
+        const birthDay = birth.getDate();
+        const todayYear = today.getFullYear();
+        const todayMonth = today.getMonth();
+        const todayDay = today.getDate();
+
+        // 만나이 (국제 나이) — 생일 지남 여부에 따라 계산
+        const hadBirthdayThisYear =
+          todayMonth > birthMonth || (todayMonth === birthMonth && todayDay >= birthDay);
+        const manAge = todayYear - birthYear - (hadBirthdayThisYear ? 0 : 1);
+
+        // 연 나이 (연도 나이) — 단순 연도 차이
+        const yeonAge = todayYear - birthYear;
+
+        // 세는 나이 (한국 전통 나이) — 연도 차이 + 1
+        const countingAge = todayYear - birthYear + 1;
+
+        // 다음 생일까지 남은 일수
+        let nextBirthday = new Date(todayYear, birthMonth, birthDay);
+        if (nextBirthday <= today) {
+          nextBirthday = new Date(todayYear + 1, birthMonth, birthDay);
+        }
+        const isBirthdayToday = todayMonth === birthMonth && todayDay === birthDay;
+        const diffTime = nextBirthday.getTime() - today.getTime();
+        const daysUntil = isBirthdayToday ? 0 : Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        const nextBdStr = `${nextBirthday.getFullYear()}년 ${nextBirthday.getMonth() + 1}월 ${nextBirthday.getDate()}일`;
+
+        // 총 살아온 일수
+        const totalDays = Math.floor((today.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
+
+        // 띠 계산
+        const zodiacAnimals = ['원숭이', '닭', '개', '돼지', '쥐', '소', '호랑이', '토끼', '용', '뱀', '말', '양'];
+        const zodiac = zodiacAnimals[birthYear % 12];
+
+        // 별자리
+        const constellations = [
+          { name: '염소자리', end: [1, 19] },
+          { name: '물병자리', end: [2, 18] },
+          { name: '물고기자리', end: [3, 20] },
+          { name: '양자리', end: [4, 19] },
+          { name: '황소자리', end: [5, 20] },
+          { name: '쌍둥이자리', end: [6, 21] },
+          { name: '게자리', end: [7, 22] },
+          { name: '사자자리', end: [8, 22] },
+          { name: '처녀자리', end: [9, 22] },
+          { name: '천칭자리', end: [10, 22] },
+          { name: '전갈자리', end: [11, 21] },
+          { name: '사수자리', end: [12, 21] },
+          { name: '염소자리', end: [12, 31] },
+        ];
+        const m = birthMonth + 1;
+        const d = birthDay;
+        let constellation = '염소자리';
+        for (const c of constellations) {
+          if (m < c.end[0] || (m === c.end[0] && d <= c.end[1])) {
+            constellation = c.name;
+            break;
+          }
+        }
+
+        return {
+          manAge,
+          yeonAge,
+          countingAge,
+          daysUntil,
+          nextBirthdayDate: isBirthdayToday ? '' : nextBdStr,
+          totalDays,
+          zodiac,
+          constellation,
+          birthDateFormatted: `${birthYear}년 ${birthMonth + 1}월 ${birthDay}일`,
+        };
+      }, [birthDate]);
+
+      const handleReset = () => setBirthDate('');
+
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10">
+          <div className="w-full max-w-md space-y-5">
+            {/* Header */}
+            <div className="text-center mb-2">
+              <h1 className="text-3xl font-bold text-gray-800 mb-1">나이 계산기</h1>
+              <p className="text-gray-400 text-sm">생년월일을 입력하면 세 가지 나이를 알려드립니다</p>
+              <p className="text-gray-300 text-xs mt-1">오늘: {today.getFullYear()}년 {today.getMonth() + 1}월 {today.getDate()}일</p>
+            </div>
+
+            {/* Input Card */}
+            <Card>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                생년월일
+              </label>
+              <input
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                max={`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-800 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-all"
+                aria-label="생년월일 선택"
+              />
+              {birthDate && (
+                <div className="mt-3 flex justify-end">
+                  <Button variant="ghost" size="sm" onClick={handleReset}>
+                    초기화
+                  </Button>
+                </div>
+              )}
+            </Card>
+
+            {/* Error */}
+            {result && result.error && (
+              <Card className="fade-in border-red-100 bg-red-50">
+                <p className="text-red-500 text-center font-medium">{result.error}</p>
+              </Card>
+            )}
+
+            {/* Results */}
+            {result && !result.error && (
+              <>
+                {/* Three Age Methods */}
+                <Card className="fade-in pulse-ring">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-4 text-center">나이 계산 결과</h3>
+                  <div className="grid grid-cols-3 gap-3">
+                    <AgeCard
+                      age={result.manAge}
+                      label="만나이"
+                      sublabel="법적 기준 (2023~)"
+                      color="indigo"
+                      icon="📋"
+                    />
+                    <AgeCard
+                      age={result.yeonAge}
+                      label="연 나이"
+                      sublabel="연도 차이"
+                      color="emerald"
+                      icon="📅"
+                    />
+                    <AgeCard
+                      age={result.countingAge}
+                      label="세는 나이"
+                      sublabel="한국 전통"
+                      color="amber"
+                      icon="🇰🇷"
+                    />
+                  </div>
+                  <div className="mt-4 bg-gray-50 rounded-lg p-3 space-y-1.5">
+                    <p className="text-xs text-gray-500">
+                      <span className="font-semibold text-indigo-600">만나이</span> : 현재연도 - 출생연도, 생일 안 지났으면 -1 (국제 표준)
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      <span className="font-semibold text-emerald-600">연 나이</span> : 현재연도 - 출생연도 (생일 무관, 단순 연도 차이)
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      <span className="font-semibold text-amber-600">세는 나이</span> : 현재연도 - 출생연도 + 1 (태어나면 1살, 새해마다 +1)
+                    </p>
+                  </div>
+                </Card>
+
+                {/* Birthday Countdown */}
+                <BirthdayCountdown
+                  daysUntil={result.daysUntil}
+                  nextBirthdayDate={result.nextBirthdayDate}
+                />
+
+                {/* Detail Info */}
+                <Card className="fade-in">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-3">상세 정보</h3>
+                  <DetailInfo label="생년월일" value={result.birthDateFormatted} />
+                  <DetailInfo label="살아온 날" value={`${result.totalDays.toLocaleString()}일`} />
+                  <DetailInfo label="띠" value={`${result.zodiac}띠`} />
+                  <DetailInfo label="별자리" value={result.constellation} />
+                </Card>
+              </>
+            )}
+
+            {/* Empty State */}
+            {!result && (
+              <div className="text-center py-8 text-gray-300">
+                <p className="text-5xl mb-3">🎂</p>
+                <p className="text-sm">위에서 생년월일을 선택해주세요</p>
+              </div>
+            )}
+          </div>
+
+          <footer className="mt-10 text-center text-gray-300 text-xs">
+            나이 계산기 &copy; 2026
+          </footer>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 Rendering
+    // ========================================
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
