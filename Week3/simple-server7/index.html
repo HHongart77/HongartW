@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>비밀 메시지</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: #0a0a0f;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+      20%, 40%, 60%, 80% { transform: translateX(6px); }
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3), 0 0 60px rgba(139, 92, 246, 0.1); }
+      50% { box-shadow: 0 0 30px rgba(139, 92, 246, 0.5), 0 0 80px rgba(139, 92, 246, 0.2); }
+    }
+
+    @keyframes textGlow {
+      0%, 100% { text-shadow: 0 0 10px rgba(139, 92, 246, 0.5), 0 0 40px rgba(139, 92, 246, 0.2); }
+      50% { text-shadow: 0 0 20px rgba(139, 92, 246, 0.8), 0 0 60px rgba(139, 92, 246, 0.4); }
+    }
+
+    @keyframes particleFloat {
+      0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(-120px) rotate(360deg); opacity: 0; }
+    }
+
+    @keyframes bgShift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    .shake { animation: shake 0.5s ease-in-out; }
+    .fade-in-up { animation: fadeInUp 0.8s ease-out forwards; }
+    .glow-pulse { animation: glowPulse 3s ease-in-out infinite; }
+    .text-glow { animation: textGlow 2s ease-in-out infinite; }
+
+    .bg-animated {
+      background: linear-gradient(135deg, #0a0a0f 0%, #1a0a2e 25%, #0a0a0f 50%, #0f1a2e 75%, #0a0a0f 100%);
+      background-size: 400% 400%;
+      animation: bgShift 15s ease infinite;
+    }
+
+    .input-glow:focus {
+      box-shadow: 0 0 15px rgba(139, 92, 246, 0.4), 0 0 30px rgba(139, 92, 246, 0.1);
+    }
+
+    .particle {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(139, 92, 246, 0.6);
+      animation: particleFloat 2s ease-out forwards;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks Destructuring
+    // ========================================
+    const { useState, useCallback, useEffect, useRef } = React;
+
+    // ========================================
+    // Design System Components
+    // ========================================
+
+    function Button({ children, variant = 'primary', size = 'md', disabled = false, onClick, className = '' }) {
+      const base = 'font-medium rounded-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer';
+      const variants = {
+        primary: 'bg-violet-600 hover:bg-violet-500 text-white focus:ring-violet-500 shadow-lg shadow-violet-600/20 hover:shadow-violet-500/30',
+        secondary: 'bg-transparent border border-violet-500/40 text-violet-300 hover:bg-violet-500/10 hover:border-violet-400 focus:ring-violet-500',
+        ghost: 'bg-transparent text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 focus:ring-violet-500',
+      };
+      const sizes = {
+        sm: 'px-4 py-2 text-sm',
+        md: 'px-6 py-3 text-base',
+        lg: 'px-8 py-4 text-lg',
+      };
+      return (
+        <button
+          onClick={onClick}
+          disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function LockIcon() {
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-16 h-16 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+        </svg>
+      );
+    }
+
+    function UnlockIcon() {
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-16 h-16 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+        </svg>
+      );
+    }
+
+    function EyeIcon() {
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      );
+    }
+
+    function EyeSlashIcon() {
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+        </svg>
+      );
+    }
+
+    // ========================================
+    // Particle Effect Component
+    // ========================================
+
+    function Particles({ active }) {
+      const containerRef = useRef(null);
+
+      useEffect(() => {
+        if (!active || !containerRef.current) return;
+        const container = containerRef.current;
+        const interval = setInterval(() => {
+          const particle = document.createElement('div');
+          particle.className = 'particle';
+          particle.style.left = Math.random() * 100 + '%';
+          particle.style.bottom = '0';
+          particle.style.background = `hsl(${260 + Math.random() * 40}, 80%, ${60 + Math.random() * 20}%)`;
+          particle.style.width = (3 + Math.random() * 5) + 'px';
+          particle.style.height = particle.style.width;
+          container.appendChild(particle);
+          setTimeout(() => particle.remove(), 2000);
+        }, 150);
+        return () => clearInterval(interval);
+      }, [active]);
+
+      return <div ref={containerRef} className="absolute inset-0 overflow-hidden pointer-events-none" />;
+    }
+
+    // ========================================
+    // Page Component - SecretMessage
+    // ========================================
+
+    function SecretMessage() {
+      const [password, setPassword] = useState('');
+      const [showPassword, setShowPassword] = useState(false);
+      const [isRevealed, setIsRevealed] = useState(false);
+      const [isShaking, setIsShaking] = useState(false);
+      const [errorMsg, setErrorMsg] = useState('');
+      const [attempts, setAttempts] = useState(0);
+      const [secretPassword, setSecretPassword] = useState(null);
+      const [pwLoading, setPwLoading] = useState(true);
+      const inputRef = useRef(null);
+
+      const HIDDEN_MESSAGE = '🎉 축하합니다! 당신은 비밀 메시지를 찾았습니다. 홍아트에 오신 것을 환영합니다!';
+
+      // secret.txt를 불러오고 3초마다 변경 감지
+      useEffect(() => {
+        const loadSecret = () => {
+          fetch('./secret.txt?t=' + Date.now())
+            .then(res => res.text())
+            .then(text => {
+              const pw = text.trim();
+              setSecretPassword(prev => {
+                if (prev !== null && prev !== pw) {
+                  // 파일이 변경되면 잠금 상태로 초기화
+                  setIsRevealed(false);
+                  setPassword('');
+                  setErrorMsg('');
+                  setAttempts(0);
+                }
+                return pw;
+              });
+              setPwLoading(false);
+            })
+            .catch(() => {
+              setSecretPassword('');
+              setPwLoading(false);
+            });
+        };
+        loadSecret();
+        const interval = setInterval(loadSecret, 3000);
+        return () => clearInterval(interval);
+      }, []);
+
+      const handleSubmit = useCallback((e) => {
+        e.preventDefault();
+        if (!secretPassword) return;
+        if (password === secretPassword) {
+          setIsRevealed(true);
+          setErrorMsg('');
+          setAttempts(0);
+        } else {
+          setIsShaking(true);
+          setAttempts(prev => prev + 1);
+          setErrorMsg('비밀번호가 틀렸습니다. 다시 시도해주세요.');
+          setTimeout(() => setIsShaking(false), 500);
+        }
+      }, [password, secretPassword, attempts]);
+
+      const handleHide = useCallback(() => {
+        setIsRevealed(false);
+        setPassword('');
+        setErrorMsg('');
+        setAttempts(0);
+      }, []);
+
+      const handleKeyDown = useCallback((e) => {
+        if (e.key === 'Enter') handleSubmit(e);
+      }, [handleSubmit]);
+
+      return (
+        <div className="min-h-screen bg-animated flex items-center justify-center p-4 relative">
+          <Particles active={isRevealed} />
+
+          {/* Background decorative orbs */}
+          <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-violet-600/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-indigo-600/5 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 w-full max-w-md">
+            {/* Card */}
+            <div className={`bg-gray-900/80 backdrop-blur-xl border border-violet-500/20 rounded-2xl p-8 glow-pulse ${isShaking ? 'shake' : ''}`}>
+
+              {/* Icon */}
+              <div className="flex justify-center mb-6">
+                {isRevealed ? <UnlockIcon /> : <LockIcon />}
+              </div>
+
+              {/* Title */}
+              <h1 className="text-2xl font-bold text-center text-white mb-2 text-glow">
+                비밀 메시지
+              </h1>
+              <p className="text-sm text-violet-300/60 text-center mb-8">
+                {isRevealed ? '메시지가 해독되었습니다' : '비밀번호를 입력하여 메시지를 해독하세요'}
+              </p>
+
+              {!isRevealed ? (
+                /* Password Form */
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  {/* secret.txt 로딩 상태 표시 */}
+                  <div className="flex items-center gap-2 text-xs text-violet-400/50 mb-1">
+                    <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                    </svg>
+                    {pwLoading
+                      ? 'secret.txt 불러오는 중...'
+                      : secretPassword
+                        ? 'secret.txt 에서 비밀번호 로드됨 (3초마다 자동 갱신)'
+                        : 'secret.txt 파일을 찾을 수 없습니다'
+                    }
+                  </div>
+                  <div>
+                    <label htmlFor="password" className="block text-sm font-medium text-violet-300 mb-2">
+                      비밀번호
+                    </label>
+                    <div className="relative">
+                      <input
+                        ref={inputRef}
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (errorMsg) setErrorMsg('');
+                        }}
+                        onKeyDown={handleKeyDown}
+                        placeholder="비밀번호를 입력하세요..."
+                        autoComplete="off"
+                        aria-describedby={errorMsg ? 'error-msg' : undefined}
+                        className="w-full bg-gray-800/80 border border-violet-500/30 rounded-xl px-4 py-3 pr-12 text-white placeholder-gray-500 focus:border-violet-400 focus:outline-none input-glow transition-all duration-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(prev => !prev)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-400/60 hover:text-violet-300 transition-colors cursor-pointer"
+                        aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeSlashIcon /> : <EyeIcon />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {errorMsg && (
+                    <p id="error-msg" className="text-red-400 text-sm flex items-center gap-2" role="alert">
+                      <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      {errorMsg}
+                    </p>
+                  )}
+
+                  <Button
+                    variant="primary"
+                    size="md"
+                    onClick={handleSubmit}
+                    disabled={!password.trim() || pwLoading || !secretPassword}
+                    className="w-full"
+                  >
+                    해독하기
+                  </Button>
+
+                  {attempts > 0 && (
+                    <p className="text-xs text-gray-500 text-center">
+                      시도 횟수: {attempts}회
+                    </p>
+                  )}
+                </form>
+              ) : (
+                /* Revealed Message */
+                <div className="fade-in-up space-y-6">
+                  <div className="bg-gradient-to-br from-violet-500/10 to-indigo-500/10 border border-violet-400/20 rounded-xl p-6">
+                    <p className="text-lg text-white leading-relaxed text-center font-medium">
+                      {HIDDEN_MESSAGE}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={handleHide}
+                      className="w-full"
+                    >
+                      다시 숨기기
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <p className="text-center text-gray-600 text-xs mt-6">
+              Hongart Secret Message System
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+
+    function App() {
+      return <SecretMessage />;
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
