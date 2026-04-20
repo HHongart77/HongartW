@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>할 일 목록</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useCallback, useMemo } = React;
+
+    // ========================================
+    // Design System Components
+    // ========================================
+
+    function Button({ children, onClick, variant = "primary", size = "md", disabled = false, className = "" }) {
+      const base = "font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer";
+      const variants = {
+        primary: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
+        secondary: "bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-400",
+        danger: "bg-red-500 text-white hover:bg-red-600 focus:ring-red-400",
+        ghost: "bg-transparent text-gray-500 hover:bg-gray-100 focus:ring-gray-300",
+      };
+      const sizes = {
+        sm: "px-3 py-1.5 text-sm",
+        md: "px-4 py-2 text-base",
+        lg: "px-6 py-3 text-lg",
+      };
+      return (
+        <button
+          onClick={onClick}
+          disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${disabled ? "opacity-50 cursor-not-allowed" : ""} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ value, onChange, placeholder, onKeyDown, className = "" }) {
+      return (
+        <input
+          type="text"
+          value={value}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          className={`w-full border border-gray-300 rounded-lg px-4 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${className}`}
+        />
+      );
+    }
+
+    function Card({ children, className = "" }) {
+      return (
+        <div className={`bg-white rounded-xl shadow-md p-6 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Todo Item Component
+    // ========================================
+
+    function TodoItem({ todo, onToggle, onDelete }) {
+      return (
+        <li className="flex items-center gap-3 py-3 px-4 rounded-lg hover:bg-gray-50 group transition-colors">
+          <input
+            type="checkbox"
+            checked={todo.done}
+            onChange={() => onToggle(todo.id)}
+            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer flex-shrink-0"
+            aria-label={todo.done ? "완료 취소" : "완료로 표시"}
+          />
+          <span
+            className={`flex-1 text-base select-none cursor-pointer ${todo.done ? "line-through text-gray-400" : "text-gray-800"}`}
+            onClick={() => onToggle(todo.id)}
+          >
+            {todo.text}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(todo.id)}
+            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 hover:bg-red-50"
+            aria-label="삭제"
+          >
+            삭제
+          </Button>
+        </li>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+
+    function App() {
+      const [todos, setTodos] = useState([]);
+      const [input, setInput] = useState("");
+
+      const addTodo = useCallback(() => {
+        const text = input.trim();
+        if (!text) return;
+        setTodos(prev => [...prev, { id: Date.now(), text, done: false }]);
+        setInput("");
+      }, [input]);
+
+      const toggleTodo = useCallback((id) => {
+        setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+      }, []);
+
+      const deleteTodo = useCallback((id) => {
+        setTodos(prev => prev.filter(t => t.id !== id));
+      }, []);
+
+      const handleKeyDown = useCallback((e) => {
+        if (e.key === "Enter") addTodo();
+      }, [addTodo]);
+
+      const remaining = useMemo(() => todos.filter(t => !t.done).length, [todos]);
+
+      return (
+        <div className="max-w-lg mx-auto px-4 py-12">
+          <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">
+            할 일 목록
+          </h1>
+
+          <Card>
+            {/* 입력 영역 */}
+            <div className="flex gap-2 mb-6">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="할 일을 입력하세요..."
+              />
+              <Button onClick={addTodo} disabled={!input.trim()} className="flex-shrink-0">
+                추가
+              </Button>
+            </div>
+
+            {/* 할 일 목록 */}
+            {todos.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-lg mb-1">아직 할 일이 없습니다</p>
+                <p className="text-sm">위에 입력해서 추가해 보세요!</p>
+              </div>
+            ) : (
+              <>
+                <ul className="divide-y divide-gray-100">
+                  {todos.map(todo => (
+                    <TodoItem
+                      key={todo.id}
+                      todo={todo}
+                      onToggle={toggleTodo}
+                      onDelete={deleteTodo}
+                    />
+                  ))}
+                </ul>
+
+                {/* 하단 정보 */}
+                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm text-gray-500">
+                  <span>
+                    남은 할 일: <strong className="text-blue-600">{remaining}</strong>개
+                  </span>
+                  {todos.some(t => t.done) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTodos(prev => prev.filter(t => !t.done))}
+                    >
+                      완료된 항목 삭제
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

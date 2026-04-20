@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-white min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    function App() {
+      const [todos, setTodos] = useState([]);
+      const [text, setText] = useState('');
+
+      useEffect(() => {
+        fetch('/api/todos')
+          .then(res => res.json())
+          .then(res => setTodos(res.data.map(t => ({ ...t, done: false }))));
+      }, []);
+
+      const completedCount = useMemo(() => todos.filter(t => t.done).length, [todos]);
+
+      const addTodo = () => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        fetch('/api/todos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: trimmed }),
+        })
+          .then(res => res.json())
+          .then(res => {
+            setTodos(prev => [...prev, { ...res.data, done: false }]);
+            setText('');
+          });
+      };
+
+      const toggleTodo = (id) => {
+        setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+      };
+
+      const deleteTodo = (id) => {
+        fetch(`/api/todos/${id}`, { method: 'DELETE' })
+          .then(() => setTodos(prev => prev.filter(t => t.id !== id)));
+      };
+
+      return (
+        <div className="max-w-md mx-auto px-6 py-10">
+          <h1 className="text-2xl font-bold text-gray-900">Todo</h1>
+          <p className="text-sm text-gray-400 mt-0.5 mb-6">
+            {completedCount}/{todos.length} completed
+          </p>
+
+          {/* Input */}
+          <div className="flex gap-2 mb-6">
+            <input
+              type="text"
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addTodo()}
+              placeholder="Add a new task..."
+              className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-gray-400"
+            />
+            <button
+              onClick={addTodo}
+              className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              Add
+            </button>
+          </div>
+
+          {/* Todo List */}
+          <ul className="space-y-2">
+            {todos.map(todo => (
+              <li
+                key={todo.id}
+                className="flex items-center gap-3 px-4 py-3 border border-gray-100 rounded-lg"
+              >
+                <button
+                  onClick={() => toggleTodo(todo.id)}
+                  className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
+                    todo.done ? 'border-gray-400 bg-gray-400' : 'border-gray-300 bg-white'
+                  }`}
+                  aria-label="완료 토글"
+                />
+                <span className={`text-sm flex-1 ${todo.done ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                  {todo.text}
+                </span>
+                <button
+                  onClick={() => deleteTodo(todo.id)}
+                  className="text-gray-300 hover:text-red-400 text-xs transition-colors"
+                  aria-label="삭제"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

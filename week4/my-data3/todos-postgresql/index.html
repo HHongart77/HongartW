@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo (PostgreSQL)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-white min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const [tab, setTab]                   = useState('todos'); // 'todos' | 'users'
+      const [users, setUsers]               = useState([]);
+      const [todos, setTodos]               = useState([]);
+      const [filterUserId, setFilterUserId] = useState(null); // null = All
+      const [title, setTitle]               = useState('');
+      const [addUserId, setAddUserId]       = useState(null); // 추가 시 선택 유저
+      const [newUserName, setNewUserName]   = useState('');
+      const [hoveredId, setHoveredId]       = useState(null);
+      const [loading, setLoading]           = useState(true);
+
+      useEffect(() => {
+        Promise.all([
+          fetch('/api/users').then(r => r.json()),
+          fetch('/api/todos').then(r => r.json()),
+        ]).then(([u, t]) => {
+          setUsers(u.data);
+          setTodos(t.data);
+          if (u.data.length > 0) setAddUserId(u.data[0].id);
+        }).finally(() => setLoading(false));
+      }, []);
+
+      const filteredTodos = filterUserId
+        ? todos.filter(t => t.user_id === filterUserId)
+        : todos;
+
+      const completedCount = useMemo(() => filteredTodos.filter(t => t.done).length, [filteredTodos]);
+
+      const getUserName = (user_id) => users.find(u => u.id === user_id)?.name ?? '';
+
+      const addTodo = () => {
+        if (!title.trim() || !addUserId) return;
+        fetch('/api/todos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: addUserId, title: title.trim() }),
+        })
+          .then(r => r.json())
+          .then(r => { setTodos(prev => [...prev, r.data]); setTitle(''); });
+      };
+
+      const toggleTodo = (id, done) => {
+        fetch(`/api/todos/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ done: !done }),
+        })
+          .then(r => r.json())
+          .then(r => setTodos(prev => prev.map(t => t.id === id ? r.data : t)));
+      };
+
+      const deleteTodo = (id) => {
+        fetch(`/api/todos/${id}`, { method: 'DELETE' })
+          .then(() => setTodos(prev => prev.filter(t => t.id !== id)));
+      };
+
+      const addUser = () => {
+        if (!newUserName.trim()) return;
+        fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newUserName.trim() }),
+        })
+          .then(r => r.json())
+          .then(r => {
+            if (r.success) { setUsers(prev => [...prev, r.data]); setNewUserName(''); }
+            else alert(r.message);
+          });
+      };
+
+      const deleteUser = (id) => {
+        if (!confirm('유저를 삭제하면 해당 Todo도 모두 삭제됩니다.')) return;
+        fetch(`/api/users/${id}`, { method: 'DELETE' })
+          .then(r => r.json())
+          .then(r => {
+            if (r.success) {
+              setUsers(prev => prev.filter(u => u.id !== id));
+              setTodos(prev => prev.filter(t => t.user_id !== id));
+              if (filterUserId === id) setFilterUserId(null);
+            }
+          });
+      };
+
+      if (loading) return (
+        <div className="flex items-center justify-center min-h-screen text-sm text-gray-400">
+          연결 중...
+        </div>
+      );
+
+      return (
+        <div className="max-w-md mx-auto px-6 py-10">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Todo</h1>
+
+          {/* 상단 탭 */}
+          <div className="flex border-b border-gray-200 mb-6">
+            {['todos', 'users'].map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-6 py-2 text-sm font-medium transition-colors ${
+                  tab === t
+                    ? 'border-b-2 border-gray-900 text-gray-900 -mb-px'
+                    : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                {t === 'todos' ? 'Todos' : 'Users'}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Todos 탭 ── */}
+          {tab === 'todos' && (
+            <>
+              {/* 유저 필터 pills */}
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <button
+                  onClick={() => setFilterUserId(null)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    filterUserId === null ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  All
+                </button>
+                {users.map(u => (
+                  <button
+                    key={u.id}
+                    onClick={() => setFilterUserId(u.id)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      filterUserId === u.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}
+                  >
+                    {u.name}
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-sm text-gray-400 mb-4">
+                {completedCount}/{filteredTodos.length} completed
+              </p>
+
+              {/* Todo 입력 */}
+              <div className="flex gap-2 mb-6">
+                <input
+                  type="text"
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addTodo()}
+                  placeholder="Add a new task..."
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:border-gray-400"
+                />
+                <button
+                  onClick={addTodo}
+                  className="px-4 py-2 bg-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+
+              {/* Todo 목록 */}
+              {filteredTodos.length === 0 ? (
+                <p className="text-sm text-gray-300 text-center py-8">할 일이 없습니다.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {filteredTodos.map(todo => (
+                    <li
+                      key={todo.id}
+                      onMouseEnter={() => setHoveredId(todo.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                      className="flex items-center gap-3 px-4 py-3 border border-gray-100 rounded-lg group"
+                    >
+                      <button
+                        onClick={() => toggleTodo(todo.id, todo.done)}
+                        className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
+                          todo.done ? 'border-gray-400 bg-gray-400' : 'border-gray-300 bg-white'
+                        }`}
+                        aria-label="완료 토글"
+                      />
+                      <span className={`flex-1 text-sm ${todo.done ? 'line-through text-gray-300' : 'text-gray-700'}`}>
+                        {todo.title}
+                      </span>
+                      <span className="text-xs text-gray-300 flex-shrink-0">
+                        {getUserName(todo.user_id)}
+                      </span>
+                      {hoveredId === todo.id && (
+                        <button
+                          onClick={() => deleteTodo(todo.id)}
+                          className="text-gray-300 hover:text-red-400 text-xs transition-colors flex-shrink-0 ml-1"
+                          aria-label="삭제"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+
+          {/* ── Users 탭 ── */}
+          {tab === 'users' && (
+            <>
+              {/* 유저 추가 */}
+              <div className="flex gap-2 mb-6">
+                <input
+                  type="text"
+                  value={newUserName}
+                  onChange={e => setNewUserName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addUser()}
+                  placeholder="새 유저 이름..."
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:border-gray-400"
+                />
+                <button
+                  onClick={addUser}
+                  className="px-4 py-2 bg-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+
+              {/* 유저 목록 */}
+              <ul className="space-y-1">
+                {users.map(u => (
+                  <li
+                    key={u.id}
+                    className="flex items-center gap-3 px-4 py-3 border border-gray-100 rounded-lg"
+                  >
+                    <span className="flex-1 text-sm text-gray-700">{u.name}</span>
+                    <span className="text-xs text-gray-300">
+                      {todos.filter(t => t.user_id === u.id).length} todos
+                    </span>
+                    <button
+                      onClick={() => deleteUser(u.id)}
+                      className="text-gray-200 hover:text-red-400 text-xs transition-colors"
+                      aria-label="삭제"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

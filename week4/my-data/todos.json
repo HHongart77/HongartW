@@ -1,0 +1,7 @@
+[
+  { "id": 1, "task": "장보기 - 우유, 계란, 빵 구매하기", "done": false },
+  { "id": 2, "task": "운동하기 - 30분 달리기", "done": false },
+  { "id": 3, "task": "코드 리뷰 완료하기", "done": false },
+  { "id": 4, "task": "독서 - 책 50페이지 읽기", "done": false },
+  { "id": 5, "task": "이메일 답장 보내기", "done": false }
+]

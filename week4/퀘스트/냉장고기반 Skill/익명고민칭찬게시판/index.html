@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>냉장고 레시피 · Home Recipe</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    html, body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      letter-spacing: -0.01em;
+      background: #f5f5f7;
+      color: #1d1d1f;
+    }
+    .apple-blue { color: #007AFF; }
+    .apple-blue-bg { background-color: #007AFF; }
+    .apple-blur {
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      background-color: rgba(255, 255, 255, 0.72);
+    }
+    .apple-card-shadow {
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .apple-card-shadow-hover {
+      box-shadow: 0 4px 8px rgba(0,0,0,0.06), 0 12px 28px rgba(0,0,0,0.08);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeInModal {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes fadeInOverlay {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .animate-fade-in { animation: fadeIn 0.35s ease-out both; }
+    .animate-modal-in { animation: fadeInModal 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .animate-overlay-in { animation: fadeInOverlay 0.22s ease-out both; }
+    /* custom scrollbar for modal */
+    .nice-scroll::-webkit-scrollbar { width: 8px; }
+    .nice-scroll::-webkit-scrollbar-track { background: transparent; }
+    .nice-scroll::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.15);
+      border-radius: 8px;
+    }
+    .nice-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(0,0,0,0.25);
+    }
+    .tag-chip { transition: transform 0.15s ease, background-color 0.2s ease; }
+    .tag-chip:hover { transform: translateY(-1px); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    // ========================================
+    // Sample Recipe Data (10+ Korean recipes)
+    // ========================================
+    const RECIPES = [
+      {
+        id: 1,
+        name: "김치찌개",
+        emoji: "🍲",
+        time: 30,
+        difficulty: "쉬움",
+        ingredients: ["김치", "돼지고기", "두부", "파", "양파", "마늘", "고춧가루"],
+        steps: [
+          "돼지고기를 한 입 크기로 썰어 팬에 볶아 기름을 냅니다.",
+          "잘 익은 김치를 넣고 함께 볶아 감칠맛을 더합니다.",
+          "물을 자작하게 붓고 끓인 뒤 두부와 양파를 넣습니다.",
+          "고춧가루와 다진 마늘로 간을 맞추고 5분간 더 끓입니다.",
+          "마지막으로 대파를 올려 마무리합니다."
+        ]
+      },
+      {
+        id: 2,
+        name: "된장찌개",
+        emoji: "🥘",
+        time: 25,
+        difficulty: "쉬움",
+        ingredients: ["된장", "두부", "애호박", "감자", "양파", "파", "마늘"],
+        steps: [
+          "물에 된장을 풀어 멸치육수를 만듭니다.",
+          "감자와 양파를 먼저 넣고 끓입니다.",
+          "애호박과 두부를 넣고 중불로 10분간 더 끓입니다.",
+          "다진 마늘을 넣어 향을 더합니다.",
+          "대파를 올려 구수한 맛을 살립니다."
+        ]
+      },
+      {
+        id: 3,
+        name: "계란볶음밥",
+        emoji: "🍳",
+        time: 15,
+        difficulty: "쉬움",
+        ingredients: ["밥", "계란", "양파", "당근", "파", "간장", "참기름"],
+        steps: [
+          "양파, 당근, 파를 잘게 다져 팬에 볶습니다.",
+          "계란을 풀어 스크램블로 익힙니다.",
+          "밥을 넣고 고루 섞으며 볶습니다.",
+          "간장으로 간을 맞춥니다.",
+          "마지막에 참기름을 둘러 향을 입힙니다."
+        ]
+      },
+      {
+        id: 4,
+        name: "토마토 파스타",
+        emoji: "🍝",
+        time: 25,
+        difficulty: "보통",
+        ingredients: ["파스타면", "토마토", "양파", "마늘", "올리브오일", "소금", "후추"],
+        steps: [
+          "끓는 물에 소금을 넣고 파스타면을 8분간 삶습니다.",
+          "팬에 올리브오일을 두르고 다진 마늘과 양파를 볶습니다.",
+          "잘게 썬 토마토를 넣고 으깨며 졸입니다.",
+          "삶은 면을 넣고 소스와 잘 버무립니다.",
+          "소금, 후추로 간을 맞춰 완성합니다."
+        ]
+      },
+      {
+        id: 5,
+        name: "비빔밥",
+        emoji: "🍚",
+        time: 35,
+        difficulty: "보통",
+        ingredients: ["밥", "계란", "당근", "시금치", "애호박", "콩나물", "고추장", "참기름"],
+        steps: [
+          "당근, 애호박을 채 썰어 각각 볶습니다.",
+          "시금치는 데쳐서 참기름과 소금으로 무칩니다.",
+          "콩나물도 데쳐 간단히 무쳐둡니다.",
+          "따뜻한 밥 위에 준비한 나물을 색감 있게 올립니다.",
+          "반숙 계란과 고추장, 참기름을 올려 비벼 먹습니다."
+        ]
+      },
+      {
+        id: 6,
+        name: "김치볶음밥",
+        emoji: "🌶️",
+        time: 15,
+        difficulty: "쉬움",
+        ingredients: ["밥", "김치", "계란", "파", "참기름", "김"],
+        steps: [
+          "김치를 잘게 썰어 팬에 볶습니다.",
+          "밥을 넣고 김치와 함께 고루 볶습니다.",
+          "참기름으로 고소함을 더합니다.",
+          "위에 반숙 계란프라이를 올립니다.",
+          "김가루와 파를 뿌려 완성합니다."
+        ]
+      },
+      {
+        id: 7,
+        name: "해물파전",
+        emoji: "🥞",
+        time: 20,
+        difficulty: "보통",
+        ingredients: ["밀가루", "파", "오징어", "새우", "계란", "소금"],
+        steps: [
+          "밀가루에 물과 계란을 풀어 반죽을 만듭니다.",
+          "대파를 길게 썰어 팬에 가지런히 깔아둡니다.",
+          "반죽을 붓고 오징어와 새우를 올립니다.",
+          "바삭하게 앞뒤로 노릇하게 부칩니다.",
+          "간장 소스와 함께 내어 먹습니다."
+        ]
+      },
+      {
+        id: 8,
+        name: "소고기 미역국",
+        emoji: "🍜",
+        time: 40,
+        difficulty: "보통",
+        ingredients: ["미역", "소고기", "마늘", "간장", "참기름"],
+        steps: [
+          "미역을 물에 30분 불립니다.",
+          "소고기를 참기름에 볶다가 불린 미역을 함께 볶습니다.",
+          "물을 넉넉히 붓고 센 불에서 끓입니다.",
+          "다진 마늘과 간장으로 간을 맞춥니다.",
+          "중약불로 20분 이상 푹 끓여 완성합니다."
+        ]
+      },
+      {
+        id: 9,
+        name: "닭볶음탕",
+        emoji: "🍗",
+        time: 50,
+        difficulty: "어려움",
+        ingredients: ["닭고기", "감자", "당근", "양파", "고추장", "고춧가루", "간장", "마늘"],
+        steps: [
+          "닭고기를 끓는 물에 데쳐 기름기를 제거합니다.",
+          "감자, 당근, 양파를 큼직하게 썹니다.",
+          "냄비에 닭과 채소를 넣고 고추장, 고춧가루, 간장, 마늘을 넣습니다.",
+          "물을 잠길 만큼 붓고 센 불에서 끓입니다.",
+          "중약불로 줄여 30분간 조리며 국물을 졸입니다."
+        ]
+      },
+      {
+        id: 10,
+        name: "제육볶음",
+        emoji: "🥩",
+        time: 25,
+        difficulty: "보통",
+        ingredients: ["돼지고기", "양파", "파", "고추장", "고춧가루", "간장", "마늘", "설탕"],
+        steps: [
+          "돼지고기에 고추장, 고춧가루, 간장, 마늘, 설탕으로 양념합니다.",
+          "양념한 고기를 30분간 재웁니다.",
+          "달군 팬에 양파를 먼저 볶습니다.",
+          "재운 고기를 넣고 센 불로 빠르게 볶습니다.",
+          "대파를 올리고 한 번 더 볶아 마무리합니다."
+        ]
+      },
+      {
+        id: 11,
+        name: "치즈 오믈렛",
+        emoji: "🧀",
+        time: 10,
+        difficulty: "쉬움",
+        ingredients: ["계란", "우유", "치즈", "소금", "후추", "버터"],
+        steps: [
+          "계란에 우유를 넣고 곱게 풀어줍니다.",
+          "소금과 후추로 간을 합니다.",
+          "팬에 버터를 녹이고 계란물을 붓습니다.",
+          "반쯤 익으면 치즈를 올리고 반으로 접습니다.",
+          "약불로 은은하게 익혀 완성합니다."
+        ]
+      },
+      {
+        id: 12,
+        name: "새우 마늘 볶음",
+        emoji: "🦐",
+        time: 15,
+        difficulty: "쉬움",
+        ingredients: ["새우", "마늘", "올리브오일", "버터", "파슬리", "후추", "소금"],
+        steps: [
+          "새우는 등쪽 내장을 제거하고 깨끗이 씻습니다.",
+          "팬에 올리브오일과 버터, 편 썬 마늘을 볶습니다.",
+          "마늘 향이 올라오면 새우를 넣고 강불에 볶습니다.",
+          "소금과 후추로 간을 맞춥니다.",
+          "파슬리를 뿌려 마무리합니다."
+        ]
+      }
+    ];
+
+    const CATEGORIES = [
+      {
+        name: "채소",
+        emoji: "🥬",
+        items: ["양파", "당근", "감자", "애호박", "파", "마늘", "시금치", "콩나물", "토마토"]
+      },
+      {
+        name: "육류",
+        emoji: "🥩",
+        items: ["돼지고기", "소고기", "닭고기"]
+      },
+      {
+        name: "해산물",
+        emoji: "🐟",
+        items: ["오징어", "새우", "미역", "김"]
+      },
+      {
+        name: "유제품",
+        emoji: "🧀",
+        items: ["계란", "우유", "치즈", "버터"]
+      },
+      {
+        name: "곡물",
+        emoji: "🌾",
+        items: ["밥", "밀가루", "파스타면"]
+      }
+    ];
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    function Button({ variant = "primary", size = "md", disabled, onClick, className = "", children, type = "button", ...rest }) {
+      const base = "inline-flex items-center justify-center font-medium rounded-full transition-all duration-200 active:scale-[0.97] focus:outline-none focus:ring-2 focus:ring-offset-2";
+      const sizes = {
+        sm: "px-3 py-1.5 text-xs",
+        md: "px-4 py-2 text-sm",
+        lg: "px-6 py-3 text-base"
+      };
+      const variants = {
+        primary: "text-white shadow-sm hover:shadow-md focus:ring-blue-300",
+        secondary: "bg-gray-100 text-gray-800 hover:bg-gray-200 focus:ring-gray-300",
+        ghost: "bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-gray-300",
+        danger: "bg-red-500 text-white hover:bg-red-600 focus:ring-red-300"
+      };
+      const style = variant === "primary" ? { backgroundColor: "#007AFF" } : {};
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          style={style}
+          className={`${base} ${sizes[size]} ${variants[variant]} ${disabled ? "opacity-50 cursor-not-allowed" : ""} ${className}`}
+          {...rest}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    const Input = React.forwardRef(function Input({ label, error, className = "", ...rest }, ref) {
+      return (
+        <div className="w-full">
+          {label && <label className="block text-xs font-medium text-gray-500 mb-1.5">{label}</label>}
+          <input
+            ref={ref}
+            className={`w-full px-4 py-3 text-[15px] bg-white/80 border border-gray-200 rounded-2xl
+                       focus:outline-none focus:border-transparent focus:ring-2 focus:ring-blue-200
+                       placeholder:text-gray-400 transition-all duration-200 ${className}`}
+            {...rest}
+          />
+          {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+        </div>
+      );
+    });
+
+    function Card({ className = "", children, onClick, hoverable = false }) {
+      return (
+        <div
+          onClick={onClick}
+          className={`bg-white rounded-3xl apple-card-shadow ${hoverable ? "cursor-pointer hover:apple-card-shadow-hover hover:-translate-y-0.5 transition-all duration-300" : ""} ${className}`}
+        >
+          {children}
+        </div>
+      );
+    }
+
+    function Badge({ children, variant = "default", className = "" }) {
+      const variants = {
+        default: "bg-gray-100 text-gray-700",
+        blue: "bg-blue-50 text-blue-600",
+        green: "bg-green-50 text-green-600",
+        red: "bg-red-50 text-red-500",
+        yellow: "bg-amber-50 text-amber-600",
+        gray: "bg-gray-50 text-gray-500"
+      };
+      return (
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${variants[variant]} ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Modal({ isOpen, onClose, title, children, size = "md" }) {
+      useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e) => e.key === "Escape" && onClose();
+        document.addEventListener("keydown", onKey);
+        document.body.style.overflow = "hidden";
+        return () => {
+          document.removeEventListener("keydown", onKey);
+          document.body.style.overflow = "";
+        };
+      }, [isOpen, onClose]);
+
+      if (!isOpen) return null;
+
+      const sizes = {
+        sm: "max-w-md",
+        md: "max-w-lg",
+        lg: "max-w-2xl",
+        xl: "max-w-3xl"
+      };
+
+      return (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-overlay-in"
+          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+          onClick={onClose}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`relative w-full ${sizes[size]} max-h-[88vh] overflow-hidden bg-white rounded-3xl shadow-2xl animate-modal-in`}
+          >
+            <div className="sticky top-0 z-10 apple-blur flex items-center justify-between px-6 py-4 border-b border-gray-200/60">
+              <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
+              <button
+                onClick={onClose}
+                aria-label="닫기"
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition"
+              >
+                <span className="text-gray-500 text-lg leading-none">×</span>
+              </button>
+            </div>
+            <div className="overflow-y-auto nice-scroll px-6 py-5" style={{ maxHeight: "calc(88vh - 64px)" }}>
+              {children}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function SegmentedControl({ options, value, onChange }) {
+      return (
+        <div className="inline-flex p-1 bg-gray-100 rounded-full">
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => onChange(opt.value)}
+              className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-200
+                          ${value === opt.value ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Common Components
+    // ========================================
+
+    function Header({ ingredientCount }) {
+      return (
+        <header className="sticky top-0 z-40 apple-blur border-b border-gray-200/60">
+          <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🧊</span>
+              <div>
+                <h1 className="text-[17px] font-semibold tracking-tight">냉장고 레시피</h1>
+                <p className="text-[11px] text-gray-500 -mt-0.5">Home Recipe</p>
+              </div>
+            </div>
+            <Badge variant="blue">{ingredientCount}개의 재료</Badge>
+          </div>
+        </header>
+      );
+    }
+
+    function Tag({ label, onRemove }) {
+      return (
+        <span
+          className="tag-chip inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 bg-white text-gray-800 text-sm rounded-full border border-gray-200 shadow-sm"
+        >
+          {label}
+          <button
+            onClick={onRemove}
+            aria-label={`${label} 삭제`}
+            className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-500 text-gray-400 transition"
+          >
+            <span className="text-xs leading-none">×</span>
+          </button>
+        </span>
+      );
+    }
+
+    // ========================================
+    // 📄 Ingredient Input Section
+    // ========================================
+
+    function IngredientInput({ ingredients, addIngredient, removeIngredient, clearAll }) {
+      const [value, setValue] = useState("");
+      const [activeCategory, setActiveCategory] = useState(CATEGORIES[0].name);
+      const inputRef = useRef(null);
+
+      const handleAdd = () => {
+        const v = value.trim();
+        if (!v) return;
+        addIngredient(v);
+        setValue("");
+        inputRef.current?.focus();
+      };
+
+      const onKeyDown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleAdd();
+        }
+      };
+
+      const currentCategory = CATEGORIES.find((c) => c.name === activeCategory);
+
+      return (
+        <Card className="p-6 md:p-8 animate-fade-in">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">어떤 재료가 있나요?</h2>
+              <p className="text-sm text-gray-500 mt-0.5">냉장고 속 재료를 추가해 주세요</p>
+            </div>
+            {ingredients.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={clearAll}>전체 비우기</Button>
+            )}
+          </div>
+
+          <div className="flex gap-2 mb-5">
+            <Input
+              ref={inputRef}
+              value={value}
+              placeholder="예: 계란, 양파, 당근..."
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={onKeyDown}
+            />
+            <button
+              onClick={handleAdd}
+              aria-label="재료 추가"
+              className="shrink-0 w-12 h-12 flex items-center justify-center text-white rounded-2xl shadow-sm hover:shadow-md active:scale-95 transition-all"
+              style={{ backgroundColor: "#007AFF" }}
+            >
+              <span className="text-xl leading-none">+</span>
+            </button>
+          </div>
+
+          {ingredients.length > 0 ? (
+            <div className="flex flex-wrap gap-2 mb-6 p-4 bg-gray-50 rounded-2xl">
+              {ingredients.map((ing) => (
+                <Tag key={ing} label={ing} onRemove={() => removeIngredient(ing)} />
+              ))}
+            </div>
+          ) : (
+            <div className="mb-6 p-6 bg-gray-50 rounded-2xl text-center">
+              <p className="text-sm text-gray-400">아직 추가된 재료가 없습니다</p>
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-3">카테고리별 빠른 추가</p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.name}
+                  onClick={() => setActiveCategory(cat.name)}
+                  className={`px-4 py-2 text-xs font-medium rounded-full transition-all duration-200 border
+                              ${activeCategory === cat.name
+                                ? "text-white border-transparent shadow-sm"
+                                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}
+                  style={activeCategory === cat.name ? { backgroundColor: "#007AFF" } : {}}
+                >
+                  <span className="mr-1">{cat.emoji}</span>{cat.name}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {currentCategory.items.map((item) => {
+                const added = ingredients.includes(item);
+                return (
+                  <button
+                    key={item}
+                    onClick={() => !added && addIngredient(item)}
+                    disabled={added}
+                    className={`px-3 py-1.5 text-sm rounded-full border transition
+                                ${added
+                                  ? "bg-blue-50 text-blue-500 border-blue-100 cursor-not-allowed"
+                                  : "bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:text-blue-500"}`}
+                  >
+                    {added ? "✓ " : "+ "}{item}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 📄 Recipe Card & List
+    // ========================================
+
+    function DifficultyBadge({ level }) {
+      const map = {
+        "쉬움": "green",
+        "보통": "yellow",
+        "어려움": "red"
+      };
+      return <Badge variant={map[level] || "default"}>{level}</Badge>;
+    }
+
+    function MatchBar({ percent }) {
+      const color = percent >= 70 ? "#34C759" : percent >= 40 ? "#FF9500" : "#FF3B30";
+      return (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${percent}%`, backgroundColor: color }}
+            />
+          </div>
+          <span className="text-xs font-semibold tabular-nums" style={{ color }}>
+            {percent}%
+          </span>
+        </div>
+      );
+    }
+
+    function RecipeCard({ recipe, ingredients, onClick }) {
+      const { matched, total, percent } = recipe.match;
+      return (
+        <Card hoverable onClick={onClick} className="p-5 flex flex-col">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 flex items-center justify-center bg-gray-50 rounded-2xl text-2xl">
+                {recipe.emoji}
+              </div>
+              <div>
+                <h3 className="text-[16px] font-semibold tracking-tight">{recipe.name}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-gray-500">⏱ {recipe.time}분</span>
+                  <DifficultyBadge level={recipe.difficulty} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 mb-4 min-h-[28px]">
+            {recipe.ingredients.slice(0, 5).map((ing) => {
+              const have = ingredients.includes(ing);
+              return (
+                <span
+                  key={ing}
+                  className={`text-[11px] px-2 py-0.5 rounded-full ${
+                    have ? "bg-blue-50 text-blue-600" : "bg-gray-50 text-gray-400"
+                  }`}
+                >
+                  {ing}
+                </span>
+              );
+            })}
+            {recipe.ingredients.length > 5 && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-50 text-gray-400">
+                +{recipe.ingredients.length - 5}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-auto">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] text-gray-500">재료 매칭</span>
+              <span className="text-[11px] text-gray-500 tabular-nums">{matched} / {total}</span>
+            </div>
+            <MatchBar percent={percent} />
+          </div>
+        </Card>
+      );
+    }
+
+    function RecipeList({ recipes, ingredients, sortBy, setSortBy, onSelect }) {
+      const sortOptions = [
+        { label: "매칭률순", value: "match" },
+        { label: "시간순", value: "time" },
+        { label: "난이도순", value: "difficulty" }
+      ];
+
+      if (ingredients.length === 0) {
+        return (
+          <Card className="p-10 text-center animate-fade-in">
+            <div className="text-5xl mb-3">🥘</div>
+            <h3 className="text-[17px] font-semibold tracking-tight mb-1">재료를 먼저 추가해 주세요</h3>
+            <p className="text-sm text-gray-500">냉장고 속 재료를 입력하면 어울리는 레시피를 추천해 드려요.</p>
+          </Card>
+        );
+      }
+
+      return (
+        <div className="animate-fade-in">
+          <div className="flex items-center justify-between mb-4 px-1">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">추천 레시피</h2>
+              <p className="text-sm text-gray-500 mt-0.5">{recipes.length}개의 레시피를 찾았어요</p>
+            </div>
+            <SegmentedControl options={sortOptions} value={sortBy} onChange={setSortBy} />
+          </div>
+
+          {recipes.length === 0 ? (
+            <Card className="p-10 text-center">
+              <div className="text-5xl mb-3">🔍</div>
+              <h3 className="text-[17px] font-semibold tracking-tight mb-1">어울리는 레시피가 없어요</h3>
+              <p className="text-sm text-gray-500">다른 재료를 추가해 보시겠어요?</p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recipes.map((r) => (
+                <RecipeCard
+                  key={r.id}
+                  recipe={r}
+                  ingredients={ingredients}
+                  onClick={() => onSelect(r)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Recipe Detail Modal
+    // ========================================
+
+    function RecipeDetail({ recipe, ingredients, isOpen, onClose }) {
+      if (!recipe) return null;
+      const have = recipe.ingredients.filter((i) => ingredients.includes(i));
+      const missing = recipe.ingredients.filter((i) => !ingredients.includes(i));
+
+      return (
+        <Modal isOpen={isOpen} onClose={onClose} title={recipe.name} size="lg">
+          <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start mb-6 pb-6 border-b border-gray-100">
+            <div className="w-20 h-20 flex items-center justify-center bg-gray-50 rounded-3xl text-4xl shrink-0">
+              {recipe.emoji}
+            </div>
+            <div className="flex-1 text-center sm:text-left">
+              <h2 className="text-2xl font-semibold tracking-tight mb-2">{recipe.name}</h2>
+              <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                <Badge variant="gray">⏱ {recipe.time}분</Badge>
+                <DifficultyBadge level={recipe.difficulty} />
+                <Badge variant="blue">매칭 {recipe.match.percent}%</Badge>
+              </div>
+            </div>
+          </div>
+
+          <section className="mb-6">
+            <h4 className="text-sm font-semibold mb-3 text-gray-800">필요한 재료</h4>
+            <div className="grid grid-cols-2 gap-2">
+              {recipe.ingredients.map((ing) => {
+                const has = ingredients.includes(ing);
+                return (
+                  <div
+                    key={ing}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-2xl text-sm
+                                ${has ? "bg-green-50 text-green-700" : "bg-red-50 text-red-500"}`}
+                  >
+                    <span className="text-base">{has ? "✓" : "✗"}</span>
+                    <span className="font-medium">{ing}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {missing.length > 0 && (
+              <p className="text-xs text-gray-500 mt-3">
+                부족한 재료 {missing.length}개: <span className="text-red-500 font-medium">{missing.join(", ")}</span>
+              </p>
+            )}
+          </section>
+
+          <section>
+            <h4 className="text-sm font-semibold mb-3 text-gray-800">조리 방법</h4>
+            <ol className="space-y-3">
+              {recipe.steps.map((step, idx) => (
+                <li key={idx} className="flex gap-3 p-4 bg-gray-50 rounded-2xl">
+                  <div
+                    className="shrink-0 w-7 h-7 flex items-center justify-center text-xs font-semibold text-white rounded-full"
+                    style={{ backgroundColor: "#007AFF" }}
+                  >
+                    {idx + 1}
+                  </div>
+                  <p className="text-sm text-gray-800 leading-relaxed pt-0.5">{step}</p>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </Modal>
+      );
+    }
+
+    // ========================================
+    // 🚀 App Component
+    // ========================================
+
+    function App() {
+      const [ingredients, setIngredients] = useState([]);
+      const [sortBy, setSortBy] = useState("match");
+      const [selected, setSelected] = useState(null);
+      const [modalOpen, setModalOpen] = useState(false);
+
+      const addIngredient = useCallback((ing) => {
+        const trimmed = ing.trim();
+        if (!trimmed) return;
+        setIngredients((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+      }, []);
+
+      const removeIngredient = useCallback((ing) => {
+        setIngredients((prev) => prev.filter((i) => i !== ing));
+      }, []);
+
+      const clearAll = useCallback(() => setIngredients([]), []);
+
+      const recipesWithMatch = useMemo(() => {
+        if (ingredients.length === 0) return [];
+        const difficultyOrder = { "쉬움": 1, "보통": 2, "어려움": 3 };
+        return RECIPES
+          .map((r) => {
+            const matched = r.ingredients.filter((i) => ingredients.includes(i)).length;
+            const total = r.ingredients.length;
+            const percent = Math.round((matched / total) * 100);
+            return { ...r, match: { matched, total, percent } };
+          })
+          .filter((r) => r.match.matched > 0)
+          .sort((a, b) => {
+            if (sortBy === "time") return a.time - b.time;
+            if (sortBy === "difficulty") return difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty];
+            return b.match.percent - a.match.percent;
+          });
+      }, [ingredients, sortBy]);
+
+      const handleSelect = (recipe) => {
+        setSelected(recipe);
+        setModalOpen(true);
+      };
+
+      return (
+        <div className="min-h-screen">
+          <Header ingredientCount={ingredients.length} />
+          <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+            <IngredientInput
+              ingredients={ingredients}
+              addIngredient={addIngredient}
+              removeIngredient={removeIngredient}
+              clearAll={clearAll}
+            />
+            <RecipeList
+              recipes={recipesWithMatch}
+              ingredients={ingredients}
+              sortBy={sortBy}
+              setSortBy={setSortBy}
+              onSelect={handleSelect}
+            />
+          </main>
+          <footer className="max-w-5xl mx-auto px-6 py-10 text-center">
+            <p className="text-xs text-gray-400">
+              Designed with <span style={{ color: "#FF3B30" }}>♥</span> · 냉장고 레시피 · Home Recipe
+            </p>
+          </footer>
+
+          <RecipeDetail
+            recipe={selected}
+            ingredients={ingredients}
+            isOpen={modalOpen}
+            onClose={() => setModalOpen(false)}
+          />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

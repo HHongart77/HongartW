@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>익명 고민·칭찬·응원 게시판</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #fef7f3 0%, #fdf4ff 50%, #eff6ff 100%);
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+    }
+    @keyframes pop {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.3); }
+      100% { transform: scale(1); }
+    }
+    .heart-pop {
+      animation: pop 0.35s ease-in-out;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in-up {
+      animation: fadeInUp 0.35s ease-out;
+    }
+    /* Custom scrollbar for textarea */
+    textarea::-webkit-scrollbar {
+      width: 8px;
+    }
+    textarea::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    textarea::-webkit-scrollbar-thumb {
+      background: #e5d4f1;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback } = React;
+
+    // ========================================
+    // 📚 Constants
+    // ========================================
+    const CATEGORIES = [
+      {
+        value: 'worry',
+        label: '고민',
+        emoji: '💭',
+        badgeClass: 'bg-indigo-100 text-indigo-700 border border-indigo-200',
+        pickerActiveClass: 'bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-200',
+        pickerIdleClass: 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50',
+      },
+      {
+        value: 'praise',
+        label: '칭찬',
+        emoji: '🌟',
+        badgeClass: 'bg-amber-100 text-amber-700 border border-amber-200',
+        pickerActiveClass: 'bg-amber-400 text-white border-amber-400 shadow-md shadow-amber-200',
+        pickerIdleClass: 'bg-white text-amber-600 border-amber-200 hover:bg-amber-50',
+      },
+      {
+        value: 'cheer',
+        label: '응원',
+        emoji: '🌿',
+        badgeClass: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+        pickerActiveClass: 'bg-emerald-500 text-white border-emerald-500 shadow-md shadow-emerald-200',
+        pickerIdleClass: 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50',
+      },
+    ];
+
+    const getCategory = (value) => CATEGORIES.find((c) => c.value === value) || CATEGORIES[0];
+
+    // ========================================
+    // 🛠️ Utility Functions
+    // ========================================
+    const formatRelativeTime = (timestamp, now) => {
+      const diffSec = Math.floor((now - timestamp) / 1000);
+      if (diffSec < 10) return '방금 전';
+      if (diffSec < 60) return `${diffSec}초 전`;
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return `${diffMin}분 전`;
+      const diffHour = Math.floor(diffMin / 60);
+      if (diffHour < 24) return `${diffHour}시간 전`;
+      const diffDay = Math.floor(diffHour / 24);
+      if (diffDay < 7) return `${diffDay}일 전`;
+      const diffWeek = Math.floor(diffDay / 7);
+      if (diffWeek < 5) return `${diffWeek}주 전`;
+      const diffMonth = Math.floor(diffDay / 30);
+      if (diffMonth < 12) return `${diffMonth}개월 전`;
+      return `${Math.floor(diffDay / 365)}년 전`;
+    };
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Button({ variant = 'primary', size = 'md', disabled = false, onClick, type = 'button', className = '', children }) {
+      const sizeClasses = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-5 py-2.5 text-sm',
+        lg: 'px-6 py-3 text-base',
+      };
+      const variantClasses = {
+        primary: 'bg-gradient-to-r from-pink-400 to-rose-400 text-white hover:from-pink-500 hover:to-rose-500 shadow-md shadow-pink-200 hover:shadow-lg',
+        secondary: 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50',
+        ghost: 'bg-transparent text-gray-600 hover:bg-gray-100',
+      };
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          className={`rounded-full font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${sizeClasses[size]} ${variantClasses[variant]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Card({ className = '', children }) {
+      return (
+        <div className={`bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/60 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Badge({ category, className = '' }) {
+      const cat = getCategory(category);
+      return (
+        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${cat.badgeClass} ${className}`}>
+          <span>{cat.emoji}</span>
+          <span>{cat.label}</span>
+        </span>
+      );
+    }
+
+    // ========================================
+    // 📝 Post Form
+    // ========================================
+    function PostForm({ onSubmit }) {
+      const [category, setCategory] = useState('worry');
+      const [content, setContent] = useState('');
+      const maxLength = 500;
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const trimmed = content.trim();
+        if (!trimmed) return;
+        onSubmit({ category, content: trimmed });
+        setContent('');
+        setCategory('worry');
+      };
+
+      const isEmpty = !content.trim();
+
+      return (
+        <Card className="p-5 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <span>✏️</span>
+            <span>마음을 나눠주세요</span>
+          </h2>
+          <form onSubmit={handleSubmit}>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-600 mb-2">카테고리</label>
+              <div className="grid grid-cols-3 gap-2">
+                {CATEGORIES.map((cat) => {
+                  const active = category === cat.value;
+                  return (
+                    <button
+                      key={cat.value}
+                      type="button"
+                      onClick={() => setCategory(cat.value)}
+                      className={`py-2.5 rounded-xl border-2 font-semibold text-sm transition-all duration-200 ${active ? cat.pickerActiveClass : cat.pickerIdleClass}`}
+                    >
+                      <span className="mr-1">{cat.emoji}</span>
+                      <span>{cat.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="content" className="block text-sm font-semibold text-gray-600 mb-2">
+                내용
+              </label>
+              <textarea
+                id="content"
+                value={content}
+                onChange={(e) => setContent(e.target.value.slice(0, maxLength))}
+                placeholder="익명으로 자유롭게 마음을 적어주세요. 여러분의 이야기는 다른 누군가에게 큰 위로가 됩니다 💗"
+                rows={4}
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent text-gray-700 placeholder:text-gray-400 text-sm leading-relaxed"
+                aria-label="게시글 내용"
+              />
+              <div className="flex justify-between items-center mt-1.5">
+                <span className="text-xs text-gray-400">🔒 완전 익명으로 등록됩니다</span>
+                <span className={`text-xs font-medium ${content.length > maxLength * 0.9 ? 'text-rose-500' : 'text-gray-400'}`}>
+                  {content.length} / {maxLength}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button type="submit" disabled={isEmpty}>
+                게시하기
+              </Button>
+            </div>
+          </form>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 🗂️ Sort Tabs
+    // ========================================
+    function SortTabs({ sortBy, onChange, total }) {
+      const tabs = [
+        { value: 'latest', label: '최신순', icon: '🕒' },
+        { value: 'empathy', label: '공감순', icon: '❤️' },
+      ];
+      return (
+        <div className="flex items-center justify-between mb-4 px-1">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold text-gray-800">게시글</h3>
+            <span className="text-xs font-semibold text-gray-500 bg-white/70 px-2 py-0.5 rounded-full border border-white">
+              {total}
+            </span>
+          </div>
+          <div className="flex bg-white/70 border border-white rounded-full p-1 shadow-sm">
+            {tabs.map((tab) => {
+              const active = sortBy === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => onChange(tab.value)}
+                  className={`px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 ${active ? 'bg-gradient-to-r from-pink-400 to-rose-400 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <span className="mr-1">{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 💌 Post Item
+    // ========================================
+    function PostItem({ post, now, onEmpathy }) {
+      const [popping, setPopping] = useState(false);
+
+      const handleClick = () => {
+        onEmpathy(post.id);
+        setPopping(true);
+        setTimeout(() => setPopping(false), 350);
+      };
+
+      return (
+        <Card className="p-4 sm:p-5 fade-in-up hover:shadow-md transition-shadow duration-200">
+          <div className="flex items-center justify-between mb-3">
+            <Badge category={post.category} />
+            <span className="text-xs text-gray-400 font-medium">{formatRelativeTime(post.createdAt, now)}</span>
+          </div>
+          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap break-words text-sm sm:text-base">
+            {post.content}
+          </p>
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={handleClick}
+              aria-label={`공감하기, 현재 ${post.empathy}명`}
+              className="group inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-50 hover:bg-rose-100 border border-rose-100 hover:border-rose-200 transition-all duration-200"
+            >
+              <span className={`text-base ${popping ? 'heart-pop' : ''}`}>❤️</span>
+              <span className="text-sm font-semibold text-rose-500 tabular-nums">{post.empathy}</span>
+            </button>
+          </div>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 🕳️ Empty State
+    // ========================================
+    function EmptyState() {
+      return (
+        <Card className="p-10 text-center">
+          <div className="text-5xl mb-3">🌷</div>
+          <h3 className="text-lg font-bold text-gray-700 mb-1">아직 게시글이 없어요</h3>
+          <p className="text-sm text-gray-500">
+            첫 번째 이야기의 주인공이 되어주세요.<br />
+            당신의 한 마디가 누군가에겐 큰 힘이 됩니다.
+          </p>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 📜 Post List
+    // ========================================
+    function PostList({ posts, now, onEmpathy }) {
+      if (posts.length === 0) return <EmptyState />;
+      return (
+        <div className="space-y-3">
+          {posts.map((post) => (
+            <PostItem key={post.id} post={post} now={now} onEmpathy={onEmpathy} />
+          ))}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🏷️ Header
+    // ========================================
+    function Header() {
+      return (
+        <header className="text-center mb-6 sm:mb-8 pt-6 sm:pt-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/70 border border-white rounded-full text-xs font-semibold text-pink-500 shadow-sm mb-3">
+            <span>🔒</span>
+            <span>100% 익명 게시판</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 tracking-tight">
+            마음을 나누는 <span className="bg-gradient-to-r from-pink-500 to-rose-400 bg-clip-text text-transparent">따뜻한 공간</span>
+          </h1>
+          <p className="text-sm text-gray-500 mt-2 px-4">
+            고민도, 칭찬도, 응원도 — 자유롭게 털어놓으세요.
+          </p>
+        </header>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const [posts, setPosts] = useState([]);
+      const [sortBy, setSortBy] = useState('latest');
+      const [now, setNow] = useState(Date.now());
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      const fetchPosts = useCallback(async (sort) => {
+        try {
+          const res = await fetch(`/api/posts?sort=${sort}`);
+          const json = await res.json();
+          if (json.success) setPosts(json.data);
+        } catch (e) {
+          setError('게시글을 불러오지 못했어요. 서버를 확인해주세요.');
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => {
+        fetchPosts(sortBy);
+      }, [sortBy]);
+
+      // Tick for relative time update
+      useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), 30 * 1000);
+        return () => clearInterval(id);
+      }, []);
+
+      const handleSubmit = useCallback(async ({ category, content }) => {
+        try {
+          const res = await fetch('/api/posts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category, content }),
+          });
+          const json = await res.json();
+          if (json.success) {
+            await fetchPosts(sortBy);
+            setNow(Date.now());
+          }
+        } catch (e) {
+          alert('게시글 등록에 실패했어요. 다시 시도해주세요.');
+        }
+      }, [sortBy, fetchPosts]);
+
+      const handleEmpathy = useCallback(async (id) => {
+        try {
+          const res = await fetch(`/api/posts/${id}/empathy`, { method: 'POST' });
+          const json = await res.json();
+          if (json.success) {
+            setPosts((prev) => prev.map((p) => (p.id === id ? json.data : p)));
+          }
+        } catch (e) {
+          // 공감 실패는 조용히 무시
+        }
+      }, []);
+
+      const sortedPosts = posts; // 서버에서 이미 정렬된 데이터 반환
+
+      return (
+        <div className="min-h-screen pb-12">
+          <div className="max-w-2xl mx-auto px-4">
+            <Header />
+            <main className="space-y-6">
+              <PostForm onSubmit={handleSubmit} />
+              <section>
+                <SortTabs sortBy={sortBy} onChange={setSortBy} total={posts.length} />
+                {loading ? (
+                  <Card className="p-10 text-center">
+                    <div className="text-3xl mb-2 animate-spin inline-block">⏳</div>
+                    <p className="text-sm text-gray-500">게시글을 불러오는 중...</p>
+                  </Card>
+                ) : error ? (
+                  <Card className="p-10 text-center">
+                    <div className="text-3xl mb-2">⚠️</div>
+                    <p className="text-sm text-rose-500">{error}</p>
+                  </Card>
+                ) : (
+                  <PostList posts={sortedPosts} now={now} onEmpathy={handleEmpathy} />
+                )}
+              </section>
+            </main>
+            <footer className="text-center text-xs text-gray-400 mt-10">
+              💗 서로에게 따뜻한 말 한마디, 오늘도 잊지 마세요.
+            </footer>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
