@@ -1,0 +1,15 @@
+{
+  "name": "my-dashboard-01",
+  "version": "1.0.0",
+  "description": "나만의 AI 대시보드 — 애플 스타일 미니멀",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.3",
+    "openai": "^4.77.0",
+    "pg": "^8.11.3"
+  }
+}
