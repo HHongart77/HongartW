@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>내 가계부 분석가</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    /* KakaoTalk-like background pattern color */
+    body, html, #root { height: 100%; margin: 0; }
+    .kakao-bg { background-color: #B2C7DA; }
+    .kakao-yellow { background-color: #FEE500; }
+    .kakao-bubble-user { background-color: #FEE500; }
+    .kakao-bubble-ai { background-color: #FFFFFF; }
+
+    /* Typing dots animation */
+    @keyframes typing-dot {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-4px); opacity: 1; }
+    }
+    .typing-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #8a8a8a;
+      margin: 0 2px;
+      animation: typing-dot 1.2s infinite ease-in-out;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+    /* Hide scrollbar for pill row on mobile */
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { scrollbar-width: none; }
+
+    /* Custom chat scrollbar */
+    .chat-scroll::-webkit-scrollbar { width: 6px; }
+    .chat-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 3px; }
+    .chat-scroll::-webkit-scrollbar-track { background: transparent; }
+
+    /* Thin scrollbar for sidebars */
+    .thin-scroll::-webkit-scrollbar { width: 6px; }
+    .thin-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); border-radius: 3px; }
+    .thin-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.28); }
+    .thin-scroll::-webkit-scrollbar-track { background: transparent; }
+    .thin-scroll { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.18) transparent; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    // ========================================
+    // Config & Constants
+    // ========================================
+    // Relative — same origin as the static server (see server.js).
+    const API_BASE_URL = '';
+
+    const CATEGORIES = ['식비', '교통', '쇼핑', '문화생활', '생활용품', '의료', '기타'];
+
+    // Category color system (shared between chart + list + badges)
+    const CATEGORY_COLORS = {
+      '식비':     { bg: 'bg-rose-400',    dot: 'bg-rose-400',    text: 'text-rose-700',    soft: 'bg-rose-50 border-rose-200' },
+      '교통':     { bg: 'bg-sky-400',     dot: 'bg-sky-400',     text: 'text-sky-700',     soft: 'bg-sky-50 border-sky-200' },
+      '쇼핑':     { bg: 'bg-violet-400',  dot: 'bg-violet-400',  text: 'text-violet-700',  soft: 'bg-violet-50 border-violet-200' },
+      '문화생활': { bg: 'bg-amber-400',   dot: 'bg-amber-400',   text: 'text-amber-700',   soft: 'bg-amber-50 border-amber-200' },
+      '생활용품': { bg: 'bg-emerald-400', dot: 'bg-emerald-400', text: 'text-emerald-700', soft: 'bg-emerald-50 border-emerald-200' },
+      '의료':     { bg: 'bg-pink-400',    dot: 'bg-pink-400',    text: 'text-pink-700',    soft: 'bg-pink-50 border-pink-200' },
+      '기타':     { bg: 'bg-gray-400',    dot: 'bg-gray-400',    text: 'text-gray-700',    soft: 'bg-gray-50 border-gray-200' },
+    };
+
+    // ========================================
+    // Utility Functions (presentation only)
+    // ========================================
+    const formatWon = (n) => (Number(n) || 0).toLocaleString('ko-KR') + '원';
+
+    const formatTime = (d) => {
+      const h = d.getHours();
+      const m = d.getMinutes();
+      const period = h < 12 ? '오전' : '오후';
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${period} ${h12}:${String(m).padStart(2, '0')}`;
+    };
+
+    const formatShortDate = (isoDate) => {
+      if (!isoDate) return '';
+      const [, m, d] = isoDate.split('-').map(Number);
+      return `${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
+    };
+
+    // ========================================
+    // API Helpers
+    // ========================================
+    // Unwrap the server envelope: { success, data, message? }
+    async function apiRequest(path, options = {}) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      if (!res.ok) {
+        throw new Error(`서버 오류 (${res.status})`);
+      }
+      let json;
+      try {
+        json = await res.json();
+      } catch (e) {
+        throw new Error('서버 응답을 해석할 수 없어요.');
+      }
+      if (!json || json.success !== true) {
+        throw new Error((json && json.message) || '요청이 실패했어요.');
+      }
+      return json.data;
+    }
+
+    const fetchTransactions = () => apiRequest('/api/transactions');
+
+    const analyzeQuestion = (question) =>
+      apiRequest('/api/ask', {
+        method: 'POST',
+        body: JSON.stringify({ question }),
+      });
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Button({ variant = 'primary', size = 'md', disabled, onClick, children, className = '', type = 'button', 'aria-label': ariaLabel }) {
+      const base = 'inline-flex items-center justify-center font-medium rounded-full transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1';
+      const variants = {
+        primary: 'bg-yellow-400 text-gray-900 hover:bg-yellow-300 focus-visible:ring-yellow-500',
+        secondary: 'bg-white text-gray-800 border border-gray-200 hover:bg-gray-50 focus-visible:ring-gray-400',
+        ghost: 'bg-transparent text-gray-700 hover:bg-black/5 focus-visible:ring-gray-400',
+        danger: 'bg-red-500 text-white hover:bg-red-600 focus-visible:ring-red-500',
+      };
+      const sizes = {
+        sm: 'text-xs px-3 py-1.5',
+        md: 'text-sm px-4 py-2',
+        lg: 'text-base px-5 py-2.5',
+      };
+      const disabledCls = disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer';
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          aria-label={ariaLabel}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${disabledCls} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function ChatBubble({ variant, text, time, children }) {
+      if (variant === 'user') {
+        return (
+          <div className="flex justify-end mb-3 items-end gap-1.5">
+            <span className="text-[10px] text-gray-600 mb-0.5 select-none">{time}</span>
+            <div className="max-w-[78%] sm:max-w-[70%] kakao-bubble-user text-gray-900 px-3.5 py-2.5 rounded-2xl rounded-tr-md shadow-sm whitespace-pre-wrap break-words leading-relaxed text-[15px]">
+              {text || children}
+            </div>
+          </div>
+        );
+      }
+      // AI
+      return (
+        <div className="flex justify-start mb-3">
+          <div className="flex gap-2 max-w-[88%] sm:max-w-[80%]">
+            <div className="flex-shrink-0 w-9 h-9 rounded-full bg-yellow-400 flex items-center justify-center text-lg shadow-sm" aria-hidden="true">
+              💰
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-gray-700 mb-1 ml-0.5">내 가계부 분석가</span>
+              <div className="flex items-end gap-1.5">
+                <div className="kakao-bubble-ai text-gray-900 px-3.5 py-2.5 rounded-2xl rounded-tl-md shadow-sm whitespace-pre-wrap break-words leading-relaxed text-[15px]">
+                  {text || children}
+                </div>
+                {time && <span className="text-[10px] text-gray-600 mb-0.5 select-none">{time}</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function SuggestionChip({ label, onClick, variant = 'sidebar' }) {
+      if (variant === 'pill') {
+        return (
+          <button
+            type="button"
+            onClick={onClick}
+            className="flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full bg-white/80 border border-gray-300 text-gray-800 text-sm hover:bg-white active:scale-95 transition shadow-sm"
+          >
+            {label}
+          </button>
+        );
+      }
+      if (variant === 'compact') {
+        return (
+          <button
+            type="button"
+            onClick={onClick}
+            className="w-full text-left px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 text-[13px] hover:bg-yellow-50 hover:border-yellow-300 active:scale-[0.98] transition"
+          >
+            {label}
+          </button>
+        );
+      }
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          className="w-full text-left px-3 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-800 text-sm hover:bg-yellow-50 hover:border-yellow-300 active:scale-[0.98] transition shadow-sm"
+        >
+          <span className="mr-1.5">💬</span>{label}
+        </button>
+      );
+    }
+
+    function TypingIndicator() {
+      return (
+        <div className="flex justify-start mb-3">
+          <div className="flex gap-2 max-w-[80%]">
+            <div className="flex-shrink-0 w-9 h-9 rounded-full bg-yellow-400 flex items-center justify-center text-lg shadow-sm" aria-hidden="true">
+              💰
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs text-gray-700 mb-1 ml-0.5">내 가계부 분석가</span>
+              <div className="kakao-bubble-ai px-4 py-3 rounded-2xl rounded-tl-md shadow-sm flex items-center" aria-label="입력 중">
+                <span className="typing-dot"></span>
+                <span className="typing-dot"></span>
+                <span className="typing-dot"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Category colored badge (small)
+    function CategoryBadge({ category, size = 'sm' }) {
+      const c = CATEGORY_COLORS[category] || CATEGORY_COLORS['기타'];
+      const sz = size === 'xs' ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-2 py-0.5';
+      return (
+        <span className={`inline-flex items-center gap-1 rounded-full border ${c.soft} ${c.text} ${sz} font-medium whitespace-nowrap`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`}></span>
+          {category}
+        </span>
+      );
+    }
+
+    // FilterChip — toggle-style pill for category filters
+    function FilterChip({ active, onClick, children, color }) {
+      const base = 'text-[11px] px-2.5 py-1 rounded-full border transition whitespace-nowrap';
+      const activeCls = color
+        ? `${color.soft} ${color.text} border-current font-semibold shadow-sm`
+        : 'bg-gray-900 text-white border-gray-900 font-semibold';
+      const idle = 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50';
+      return (
+        <button type="button" onClick={onClick} className={`${base} ${active ? activeCls : idle}`}>
+          {children}
+        </button>
+      );
+    }
+
+    // TransactionRow — one line in the right sidebar list
+    function TransactionRow({ tx }) {
+      return (
+        <div className="flex items-start gap-2 py-2.5 px-3 border-b border-gray-100 hover:bg-gray-50 transition">
+          <div className="flex flex-col items-center w-10 flex-shrink-0 pt-0.5">
+            <div className="text-[11px] text-gray-500 font-mono">{formatShortDate(tx.date)}</div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <CategoryBadge category={tx.category} size="xs" />
+            </div>
+            <div className="text-[13px] text-gray-800 truncate" title={tx.description}>
+              {tx.description}
+            </div>
+          </div>
+          <div className="text-[13px] font-semibold text-gray-900 tabular-nums whitespace-nowrap pt-0.5">
+            {formatWon(tx.amount)}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Layout/Specialty Components
+    // ========================================
+    function Header() {
+      return (
+        <header className="kakao-yellow flex-shrink-0 h-14 flex items-center px-3 sm:px-4 shadow-sm relative z-10">
+          <button
+            type="button"
+            aria-label="뒤로 가기"
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-black/5 active:scale-95 transition"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-900">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          <h1 className="flex-1 text-center text-base sm:text-lg font-bold text-gray-900 truncate px-2">
+            내 가계부 분석가
+          </h1>
+          <button
+            type="button"
+            aria-label="메뉴 열기"
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-black/5 active:scale-95 transition"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-900">
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+        </header>
+      );
+    }
+
+    // Grouped suggestions shown in the left sidebar
+    const SUGGESTION_GROUPS = [
+      {
+        label: '💰 지출 요약',
+        items: ['이번달 얼마 썼어?', '지난주 지출은?', '오늘 얼마 썼어?', '하루 평균 지출'],
+      },
+      {
+        label: '🍽️ 식비 분석',
+        items: ['식비 가장 많은 날', '식비 총 얼마 썼어?', '식비 평균은?'],
+      },
+      {
+        label: '📅 기간 비교',
+        items: ['주중 vs 주말 비교', '이번주 vs 저번주', '상반월 vs 하반월'],
+      },
+      {
+        label: '📊 카테고리 분석',
+        items: ['카테고리별 비율', '가장 많이 쓴 카테고리', '교통비는 얼마?', '쇼핑에 얼마 썼어?'],
+      },
+      {
+        label: '🔥 소비 패턴',
+        items: ['가장 비싼 지출은?', '10만원 넘는 지출', '자주 가는 곳은?'],
+      },
+    ];
+
+    // Top 6 most-useful quick prompts for the mobile pill row
+    const MOBILE_QUICK_PROMPTS = [
+      '이번달 얼마 썼어?',
+      '오늘 얼마 썼어?',
+      '식비 가장 많은 날',
+      '카테고리별 비율',
+      '가장 비싼 지출은?',
+      '주중 vs 주말 비교',
+    ];
+
+    function LeftSidebar({ onSelect, transactions, loading }) {
+      const total = useMemo(
+        () => transactions.reduce((s, t) => s + (Number(t.amount) || 0), 0),
+        [transactions]
+      );
+      return (
+        <aside className="hidden md:flex flex-col w-60 lg:w-60 flex-shrink-0 bg-gray-50 border-r border-gray-200 min-h-0">
+          <div className="px-4 pt-4 pb-2 flex-shrink-0">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              추천 질문
+            </h2>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              클릭하면 바로 분석해드려요
+            </p>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto thin-scroll px-4 pb-3">
+            <div className="flex flex-col gap-4">
+              {SUGGESTION_GROUPS.map((group) => (
+                <div key={group.label}>
+                  <div className="text-[11px] font-semibold text-gray-500 mb-1.5 px-0.5">
+                    {group.label}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {group.items.map((item) => (
+                      <SuggestionChip
+                        key={item}
+                        label={item}
+                        onClick={() => onSelect(item)}
+                        variant="compact"
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="px-4 py-3 border-t border-gray-200 text-[11px] text-gray-500 leading-relaxed flex-shrink-0 bg-gray-50">
+            <div className="font-semibold text-gray-600 mb-1">📂 분석 대상 데이터</div>
+            {loading ? (
+              <div className="text-gray-400">불러오는 중…</div>
+            ) : (
+              <>
+                <div>2026년 4월 • {transactions.length}건의 거래</div>
+                <div>총 {formatWon(total)}</div>
+              </>
+            )}
+          </div>
+        </aside>
+      );
+    }
+
+    function RightSidebar({ transactions, loading, error, onRetry }) {
+      const [query, setQuery] = useState('');
+      const [activeCat, setActiveCat] = useState('전체');
+
+      const totalAmount = useMemo(
+        () => transactions.reduce((s, t) => s + (Number(t.amount) || 0), 0),
+        [transactions]
+      );
+
+      const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return transactions
+          .filter(t => activeCat === '전체' || t.category === activeCat)
+          .filter(t => !q || (t.description || '').toLowerCase().includes(q))
+          .slice()
+          .sort((a, b) => (a.date === b.date ? b.amount - a.amount : b.date < a.date ? -1 : 1));
+      }, [transactions, query, activeCat]);
+
+      const filteredTotal = useMemo(
+        () => filtered.reduce((s, t) => s + (Number(t.amount) || 0), 0),
+        [filtered]
+      );
+
+      const isFiltered = query.trim() !== '' || activeCat !== '전체';
+
+      return (
+        <aside className="hidden lg:flex flex-col w-80 flex-shrink-0 bg-white border-l border-gray-200 min-h-0">
+          {/* Sticky header */}
+          <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b border-gray-200 bg-white">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-bold text-gray-900">📒 전체 가계부</h2>
+              <span className="text-[11px] text-gray-500">
+                {loading ? '…' : `${transactions.length}건`}
+              </span>
+            </div>
+            <div className="rounded-xl bg-gradient-to-br from-gray-900 to-gray-700 text-white px-3 py-2.5">
+              <div className="text-[10px] text-gray-300 uppercase tracking-wider">Total</div>
+              <div className="text-lg font-bold tabular-nums">
+                {loading ? '…' : formatWon(totalAmount)}
+              </div>
+            </div>
+
+            {/* Search input */}
+            <div className="relative mt-3">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14" height="14" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" strokeWidth="2.2"
+                strokeLinecap="round" strokeLinejoin="round"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              >
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="내역 검색"
+                aria-label="내역 검색"
+                disabled={loading || !!error}
+                className="w-full pl-8 pr-7 py-1.5 bg-gray-100 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-60"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  aria-label="검색 지우기"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-200"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            {/* Category filter */}
+            <div className="flex gap-1.5 mt-2.5 overflow-x-auto hide-scrollbar">
+              <FilterChip
+                active={activeCat === '전체'}
+                onClick={() => setActiveCat('전체')}
+              >
+                전체
+              </FilterChip>
+              {CATEGORIES.map((cat) => (
+                <FilterChip
+                  key={cat}
+                  active={activeCat === cat}
+                  onClick={() => setActiveCat(activeCat === cat ? '전체' : cat)}
+                  color={CATEGORY_COLORS[cat]}
+                >
+                  {cat}
+                </FilterChip>
+              ))}
+            </div>
+          </div>
+
+          {/* Scrollable list */}
+          <div className="flex-1 min-h-0 overflow-y-auto thin-scroll">
+            {loading ? (
+              <div className="p-6 text-center text-gray-400 text-sm">
+                불러오는 중…
+              </div>
+            ) : error ? (
+              <div className="p-6 text-center text-sm flex flex-col items-center gap-3">
+                <div className="text-gray-500">데이터를 불러오지 못했어요</div>
+                <Button variant="secondary" size="sm" onClick={onRetry}>
+                  다시 시도
+                </Button>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 text-sm">
+                {transactions.length === 0
+                  ? '거래 내역이 없어요.'
+                  : '조건에 맞는 내역이 없어요.'}
+              </div>
+            ) : (
+              filtered.map((tx) => (
+                <TransactionRow
+                  key={tx.id != null ? tx.id : `${tx.date}-${tx.description}-${tx.amount}`}
+                  tx={tx}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Filter footer */}
+          {!loading && !error && isFiltered && (
+            <div className="flex-shrink-0 border-t border-gray-200 px-4 py-2 bg-gray-50 flex items-center justify-between text-[11px]">
+              <span className="text-gray-600">
+                필터 결과 <span className="font-semibold text-gray-900">{filtered.length}건</span>
+              </span>
+              <span className="text-gray-900 font-semibold tabular-nums">
+                {formatWon(filteredTotal)}
+              </span>
+            </div>
+          )}
+        </aside>
+      );
+    }
+
+    // Colored bar chart rendered from server's `details.breakdown`
+    function CategoryBreakdownMessage({ summary, breakdown }) {
+      const total = breakdown.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      return (
+        <div className="min-w-[240px] sm:min-w-[280px]">
+          <div className="font-semibold mb-2 whitespace-pre-wrap">{summary}</div>
+          {total > 0 && (
+            <div className="text-xs text-gray-600 mb-3">총 {formatWon(total)}</div>
+          )}
+          <div className="flex flex-col gap-2">
+            {breakdown.map((r) => (
+              <div key={r.category}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="font-medium text-gray-800">
+                    {r.category}
+                    {typeof r.count === 'number' && (
+                      <span className="text-gray-400 font-normal"> · {r.count}건</span>
+                    )}
+                  </span>
+                  <span className="text-gray-600">
+                    {formatWon(r.amount)} · {r.percent}%
+                  </span>
+                </div>
+                <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${(CATEGORY_COLORS[r.category] || CATEGORY_COLORS['기타']).bg} transition-all`}
+                    style={{ width: `${Math.max(Number(r.percent) || 0, 2)}%` }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Subtle banner shown above the chat when initial fetch failed
+    function OfflineBanner({ onRetry }) {
+      return (
+        <div className="flex-shrink-0 bg-amber-50 border-b border-amber-200 px-3 sm:px-5 py-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-[13px] text-amber-900 min-w-0">
+            <span aria-hidden="true">⚠️</span>
+            <span className="truncate">
+              서버에서 데이터를 불러오지 못했어요. 일부 기능이 제한됩니다.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="flex-shrink-0 text-[12px] font-semibold text-amber-900 underline hover:no-underline"
+          >
+            다시 시도
+          </button>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Chat Page Component
+    // ========================================
+    function ChatPage() {
+      const [messages, setMessages] = useState(() => [
+        {
+          id: 1,
+          role: 'ai',
+          payload: {
+            kind: 'text',
+            text:
+              '안녕하세요! 이번 달 가계부를 분석해드릴게요. 무엇이 궁금하신가요?\n\n' +
+              '왼쪽의 추천 질문을 눌러보거나 직접 물어보셔도 돼요 🙂',
+          },
+          time: formatTime(new Date()),
+        },
+      ]);
+      const [input, setInput] = useState('');
+      const [isThinking, setIsThinking] = useState(false);
+
+      // Transaction fetch state
+      const [transactions, setTransactions] = useState([]);
+      const [txLoading, setTxLoading] = useState(true);
+      const [txError, setTxError] = useState(null);
+
+      const scrollRef = useRef(null);
+      const inputRef = useRef(null);
+      const idCounter = useRef(2);
+
+      // Load transactions on mount (and on retry)
+      const loadTransactions = useCallback(async () => {
+        setTxLoading(true);
+        setTxError(null);
+        try {
+          const data = await fetchTransactions();
+          setTransactions(Array.isArray(data) ? data : []);
+        } catch (err) {
+          setTxError(err.message || '불러오기 실패');
+        } finally {
+          setTxLoading(false);
+        }
+      }, []);
+
+      useEffect(() => {
+        loadTransactions();
+      }, [loadTransactions]);
+
+      // Auto-scroll to bottom when messages change or typing indicator toggles
+      useEffect(() => {
+        const el = scrollRef.current;
+        if (el) {
+          el.scrollTop = el.scrollHeight;
+        }
+      }, [messages, isThinking, txError]);
+
+      const sendMessage = useCallback((text) => {
+        const trimmed = text.trim();
+        if (!trimmed || isThinking) return;
+
+        const now = new Date();
+        const userMsg = {
+          id: idCounter.current++,
+          role: 'user',
+          payload: { kind: 'text', text: trimmed },
+          time: formatTime(now),
+        };
+        setMessages((prev) => [...prev, userMsg]);
+        setInput('');
+        setIsThinking(true);
+
+        // Run the request + a minimum typing delay in parallel so the UX
+        // stays natural even when the server responds instantly.
+        const MIN_TYPING_MS = 600;
+
+        // Wait for both the network request AND the minimum typing delay,
+        // so the typing indicator always feels natural.
+        const minDelay = new Promise((resolve) => setTimeout(resolve, MIN_TYPING_MS));
+        const request = analyzeQuestion(trimmed);
+
+        Promise.all([request.then((d) => ({ ok: true, data: d }), (e) => ({ ok: false, error: e })), minDelay])
+          .then(([result]) => {
+            let payload;
+            if (result.ok) {
+              const { intent, summary, details } = result.data || {};
+              if (intent === 'categoryBreakdown' && details && Array.isArray(details.breakdown)) {
+                payload = {
+                  kind: 'categoryBreakdown',
+                  summary: summary || '📊 카테고리별 지출 비율',
+                  breakdown: details.breakdown,
+                };
+              } else {
+                payload = {
+                  kind: 'text',
+                  text: summary || '분석 결과를 가져올 수 없어요.',
+                };
+              }
+            } else {
+              payload = {
+                kind: 'text',
+                text:
+                  `⚠️ 분석 요청에 실패했어요.\n${result.error?.message || '잠시 후 다시 시도해주세요.'}`,
+              };
+            }
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: idCounter.current++,
+                role: 'ai',
+                payload,
+                time: formatTime(new Date()),
+              },
+            ]);
+            setIsThinking(false);
+            setTimeout(() => inputRef.current?.focus(), 0);
+          });
+      }, [isThinking]);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        sendMessage(input);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage(input);
+        }
+      };
+
+      const handleSuggestion = (text) => {
+        sendMessage(text);
+      };
+
+      const renderMessage = (msg) => {
+        if (msg.role === 'user') {
+          return (
+            <ChatBubble key={msg.id} variant="user" text={msg.payload.text} time={msg.time} />
+          );
+        }
+        // AI
+        if (msg.payload.kind === 'categoryBreakdown') {
+          return (
+            <ChatBubble key={msg.id} variant="ai" time={msg.time}>
+              <CategoryBreakdownMessage
+                summary={msg.payload.summary}
+                breakdown={msg.payload.breakdown}
+              />
+            </ChatBubble>
+          );
+        }
+        return (
+          <ChatBubble key={msg.id} variant="ai" text={msg.payload.text} time={msg.time} />
+        );
+      };
+
+      return (
+        <div className="flex flex-col h-full w-full bg-white">
+          <Header />
+
+          <div className="flex flex-1 min-h-0">
+            <LeftSidebar
+              onSelect={handleSuggestion}
+              transactions={transactions}
+              loading={txLoading}
+            />
+
+            <main className="flex flex-col flex-1 min-w-0 kakao-bg">
+              {/* Offline/error banner — only after initial load fails */}
+              {!txLoading && txError && (
+                <OfflineBanner onRetry={loadTransactions} />
+              )}
+
+              {/* Chat scroll area */}
+              <div
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto chat-scroll px-3 sm:px-5 py-4"
+                role="log"
+                aria-live="polite"
+                aria-label="대화 내용"
+              >
+                <div className="max-w-3xl mx-auto">
+                  <div className="flex justify-center mb-4">
+                    <span className="text-[11px] text-gray-700 bg-black/10 px-3 py-1 rounded-full">
+                      2026년 4월 20일
+                    </span>
+                  </div>
+                  {messages.map(renderMessage)}
+                  {isThinking && <TypingIndicator />}
+                </div>
+              </div>
+
+              {/* Mobile suggestion pills (hidden on desktop) */}
+              <div className="md:hidden border-t border-black/10 bg-white/70 backdrop-blur-sm">
+                <div className="flex gap-2 overflow-x-auto hide-scrollbar px-3 py-2">
+                  {MOBILE_QUICK_PROMPTS.map((s, i) => (
+                    <SuggestionChip
+                      key={i}
+                      label={s}
+                      onClick={() => handleSuggestion(s)}
+                      variant="pill"
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Input bar */}
+              <form
+                onSubmit={handleSubmit}
+                className="flex-shrink-0 bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-2"
+              >
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="메시지 입력"
+                  disabled={isThinking}
+                  aria-label="메시지 입력"
+                  className="flex-1 min-w-0 px-4 py-2.5 bg-gray-100 rounded-full text-[15px] focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-60 disabled:cursor-not-allowed"
+                />
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="md"
+                  disabled={isThinking || !input.trim()}
+                  aria-label="전송"
+                  className="!rounded-full !px-4"
+                >
+                  <span className="flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="22" y1="2" x2="11" y2="13"></line>
+                      <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                    전송
+                  </span>
+                </Button>
+              </form>
+            </main>
+
+            <RightSidebar
+              transactions={transactions}
+              loading={txLoading}
+              error={txError}
+              onRetry={loadTransactions}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App Component
+    // ========================================
+    function App() {
+      return <ChatPage />;
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

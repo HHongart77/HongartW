@@ -1,3 +1,14 @@
 .claude/
 node_modules/
 dist/
+.env
+.env.*
+!.env.example
+
+# Editor autosave / temp
+*.tmp.*
+.DS_Store
+
+# Local test artifacts
+_curl_tmp/
+.playwright-mcp/
