@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>메모장</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+      --yellow: #fef3c7;
+      --pink: #fce7f3;
+      --blue: #dbeafe;
+      --green: #d1fae5;
+      --purple: #ede9fe;
+      --orange: #fed7aa;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .search {
+      flex: 1;
+      min-width: 200px;
+      max-width: 360px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 14px;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search:focus { border-color: #9ca3af; }
+
+    .editor {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow);
+    }
+    .editor input, .editor textarea {
+      width: 100%;
+      border: none;
+      outline: none;
+      font-family: inherit;
+      background: transparent;
+      color: var(--text);
+      resize: none;
+    }
+    .editor input[name=title] {
+      font-size: 17px;
+      font-weight: 600;
+      padding: 4px 0;
+      margin-bottom: 6px;
+    }
+    .editor textarea {
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 60px;
+      padding: 4px 0;
+    }
+    .editor-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .color-picker { display: flex; gap: 6px; }
+    .color-dot {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.12s, border-color 0.12s;
+    }
+    .color-dot:hover { transform: scale(1.15); }
+    .color-dot.active { border-color: #374151; }
+    .color-dot[data-color=yellow] { background: var(--yellow); }
+    .color-dot[data-color=pink]   { background: var(--pink); }
+    .color-dot[data-color=blue]   { background: var(--blue); }
+    .color-dot[data-color=green]  { background: var(--green); }
+    .color-dot[data-color=purple] { background: var(--purple); }
+    .color-dot[data-color=orange] { background: var(--orange); }
+
+    button {
+      padding: 8px 18px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.05s;
+      font-family: inherit;
+    }
+    button:active { transform: translateY(1px); }
+    .btn-primary {
+      background: #111827;
+      color: #fff;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    }
+    .memo {
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      min-height: 140px;
+      transition: box-shadow 0.15s, transform 0.15s;
+      position: relative;
+      cursor: pointer;
+    }
+    .memo:hover {
+      box-shadow: var(--shadow-hover);
+      transform: translateY(-2px);
+    }
+    .memo[data-color=yellow] { background: var(--yellow); }
+    .memo[data-color=pink]   { background: var(--pink); }
+    .memo[data-color=blue]   { background: var(--blue); }
+    .memo[data-color=green]  { background: var(--green); }
+    .memo[data-color=purple] { background: var(--purple); }
+    .memo[data-color=orange] { background: var(--orange); }
+
+    .memo-title {
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 8px;
+      word-break: break-word;
+      line-height: 1.4;
+    }
+    .memo-content {
+      flex: 1;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #374151;
+    }
+    .memo-footer {
+      margin-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .delete-btn {
+      background: rgba(0, 0, 0, 0.05);
+      color: #374151;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .memo:hover .delete-btn { opacity: 1; }
+    .delete-btn:hover { background: rgba(0, 0, 0, 0.12); }
+
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 16px;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      background: #fff;
+      border-radius: 14px;
+      padding: 20px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+    }
+    .modal input, .modal textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 14px;
+      margin-bottom: 10px;
+      outline: none;
+      resize: vertical;
+    }
+    .modal input:focus, .modal textarea:focus { border-color: #9ca3af; }
+    .modal textarea { min-height: 140px; line-height: 1.6; }
+    .modal-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+    }
+    .btn-ghost:hover { color: var(--text); }
+
+    /* ---------- ImageKit upload UI (pastel memo tone) ---------- */
+    .dropzone {
+      margin-top: 10px;
+      border: 1.5px dashed #d1d5db;
+      border-radius: 14px;
+      background: #fcfcfa;
+      padding: 14px 12px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+      user-select: none;
+    }
+    .dropzone:hover { border-color: #9ca3af; color: var(--text); }
+    .dropzone.dragover {
+      border-color: #111827;
+      background: #fef9c3;
+      color: var(--text);
+    }
+    .dropzone .dz-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .thumb-grid {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+      gap: 8px;
+    }
+    .thumb-grid:empty { display: none; }
+    .thumb {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #f3f4f6;
+      border: 1px solid var(--border);
+    }
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .thumb-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,0.45) 100%);
+      pointer-events: none;
+    }
+    .thumb-badge {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.92);
+      color: #374151;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: calc(100% - 8px);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .thumb-badge.status-uploading { background: #dbeafe; color: #1d4ed8; }
+    .thumb-badge.status-success   { background: #d1fae5; color: #047857; }
+    .thumb-badge.status-error     { background: #fee2e2; color: #b91c1c; }
+    .thumb-spinner {
+      width: 10px; height: 10px;
+      border: 2px solid #93c5fd;
+      border-top-color: #1d4ed8;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .thumb-actions {
+      position: absolute;
+      top: 4px; right: 4px;
+      display: flex;
+      gap: 4px;
+    }
+    .thumb-btn {
+      background: rgba(255,255,255,0.92);
+      color: #374151;
+      border: none;
+      width: 20px; height: 20px;
+      padding: 0;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 20px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .thumb-btn:hover { background: #fff; }
+    .thumb-btn.retry { color: #1d4ed8; }
+    .thumb-btn.remove { color: #b91c1c; }
+
+    .thumb-error-tip {
+      position: absolute;
+      bottom: 4px; left: 4px; right: 4px;
+      font-size: 10px;
+      color: #fff;
+      background: rgba(185, 28, 28, 0.82);
+      border-radius: 6px;
+      padding: 2px 6px;
+      line-height: 1.3;
+      max-height: 28px;
+      overflow: hidden;
+    }
+
+    /* Memo card image thumbs */
+    .memo-images {
+      margin-top: 8px;
+      display: grid;
+      gap: 4px;
+      grid-template-columns: repeat(3, 1fr);
+    }
+    .memo-images[data-count="1"] { grid-template-columns: 1fr; }
+    .memo-images[data-count="2"] { grid-template-columns: 1fr 1fr; }
+    .memo-images .memo-img {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: 8px;
+      overflow: hidden;
+      background: rgba(0,0,0,0.04);
+    }
+    .memo-images .memo-img img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      transition: transform 0.2s;
+    }
+    .memo-images .memo-img:hover img { transform: scale(1.04); }
+    .memo-images .memo-img .more-badge {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      font-weight: 600;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: #111827;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 200;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📝 메모장</h1>
+      <input id="search" class="search" placeholder="메모 검색..." />
+    </header>
+
+    <form id="new-memo-form" class="editor">
+      <input name="title" placeholder="제목" maxlength="200" />
+      <textarea name="content" placeholder="메모를 작성하세요..." rows="3"></textarea>
+
+      <!-- ImageKit drop zone (new memo) -->
+      <div id="new-dropzone" class="dropzone" tabindex="0">
+        <span class="dz-hint">📎 이미지를 드래그하거나 클릭해서 추가 (최대 10MB)</span>
+        <input id="new-file-input" type="file" accept="image/*" multiple hidden />
+      </div>
+      <div id="new-thumb-grid" class="thumb-grid"></div>
+
+      <div class="editor-footer">
+        <div class="color-picker" id="color-picker">
+          <span class="color-dot active" data-color="yellow"></span>
+          <span class="color-dot" data-color="pink"></span>
+          <span class="color-dot" data-color="blue"></span>
+          <span class="color-dot" data-color="green"></span>
+          <span class="color-dot" data-color="purple"></span>
+          <span class="color-dot" data-color="orange"></span>
+        </div>
+        <button type="submit" class="btn-primary">추가</button>
+      </div>
+    </form>
+
+    <div id="grid" class="grid"></div>
+    <div id="empty" class="empty" style="display:none">아직 메모가 없습니다. 첫 메모를 작성해보세요!</div>
+  </div>
+
+  <!-- Edit modal -->
+  <div id="modal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+      <input id="edit-title" placeholder="제목" maxlength="200" />
+      <textarea id="edit-content" placeholder="내용"></textarea>
+
+      <!-- ImageKit drop zone (edit) -->
+      <div id="edit-dropzone" class="dropzone" tabindex="0" style="margin-top: 4px">
+        <span class="dz-hint">📎 이미지를 드래그하거나 클릭해서 추가 (최대 10MB)</span>
+        <input id="edit-file-input" type="file" accept="image/*" multiple hidden />
+      </div>
+      <div id="edit-thumb-grid" class="thumb-grid" style="margin-bottom: 12px"></div>
+
+      <div class="color-picker" id="edit-color-picker" style="margin-bottom: 12px">
+        <span class="color-dot" data-color="yellow"></span>
+        <span class="color-dot" data-color="pink"></span>
+        <span class="color-dot" data-color="blue"></span>
+        <span class="color-dot" data-color="green"></span>
+        <span class="color-dot" data-color="purple"></span>
+        <span class="color-dot" data-color="orange"></span>
+      </div>
+      <div class="modal-actions">
+        <button id="edit-cancel" class="btn-ghost">취소</button>
+        <button id="edit-save" class="btn-primary">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const $ = (s, el = document) => el.querySelector(s);
+    const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+    const grid = $('#grid');
+    const empty = $('#empty');
+    const form = $('#new-memo-form');
+    const search = $('#search');
+    const colorPicker = $('#color-picker');
+    const modal = $('#modal');
+    const editTitle = $('#edit-title');
+    const editContent = $('#edit-content');
+    const editColorPicker = $('#edit-color-picker');
+    const toastEl = $('#toast');
+
+    let selectedColor = 'yellow';
+    let editingId = null;
+    let editingColor = 'yellow';
+    let searchTimer = null;
+
+    // ---------- Toast ----------
+    let toastTimer = null;
+    function toast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+    }
+
+    // ---------- ImageKit upload ----------
+    const API_BASE_URL = `${window.location.origin}/api`;
+    const IMAGEKIT_UPLOAD_URL = 'https://upload.imagekit.io/api/v1/files/upload';
+    const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
+
+    async function getImageKitAuth() {
+      const res = await fetch(`${API_BASE_URL}/imagekit/auth`);
+      if (!res.ok) throw new Error(`인증 요청 실패 (${res.status})`);
+      const json = await res.json();
+      if (!json || !json.success || !json.data) {
+        throw new Error((json && json.message) || '인증 응답이 올바르지 않습니다.');
+      }
+      return json.data;
+    }
+
+    async function uploadToImageKit(file) {
+      const auth = await getImageKitAuth();
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('fileName', file.name);
+      fd.append('publicKey', auth.publicKey);
+      fd.append('signature', auth.signature);
+      fd.append('expire', String(auth.expire));
+      fd.append('token', auth.token);
+      const res = await fetch(IMAGEKIT_UPLOAD_URL, { method: 'POST', body: fd });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((json && json.message) || `업로드 실패 (${res.status})`);
+      return json; // { url, fileId, thumbnailUrl, name, size, ... }
+    }
+
+    // ---------- Dropzone controller (reusable for new form + edit modal) ----------
+    // Each item shape:
+    //   { id, file?, localUrl?, name, status: 'uploading'|'success'|'error',
+    //     url?, fileId?, thumbnailUrl?, error? }
+    // Existing images (from DB) start as { id, name, status: 'success', url, fileId, thumbnailUrl }.
+    function createDropzone({ zoneEl, inputEl, gridEl }) {
+      const items = [];
+      let nextId = 1;
+
+      function render() {
+        gridEl.innerHTML = '';
+        for (const it of items) {
+          const cell = document.createElement('div');
+          cell.className = 'thumb';
+
+          const img = document.createElement('img');
+          img.alt = it.name || '';
+          img.src = it.thumbnailUrl || it.url || it.localUrl || '';
+          cell.appendChild(img);
+
+          const overlay = document.createElement('div');
+          overlay.className = 'thumb-overlay';
+          cell.appendChild(overlay);
+
+          const badge = document.createElement('span');
+          badge.className = `thumb-badge status-${it.status}`;
+          if (it.status === 'uploading') {
+            const sp = document.createElement('span');
+            sp.className = 'thumb-spinner';
+            badge.appendChild(sp);
+            badge.appendChild(document.createTextNode('업로드 중'));
+          } else if (it.status === 'success') {
+            badge.textContent = '완료';
+          } else {
+            badge.textContent = '실패';
+          }
+          cell.appendChild(badge);
+
+          const actions = document.createElement('div');
+          actions.className = 'thumb-actions';
+          if (it.status === 'error') {
+            const retry = document.createElement('button');
+            retry.type = 'button';
+            retry.className = 'thumb-btn retry';
+            retry.title = '재시도';
+            retry.textContent = '↻';
+            retry.addEventListener('click', (e) => {
+              e.stopPropagation();
+              retryItem(it.id);
+            });
+            actions.appendChild(retry);
+          }
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'thumb-btn remove';
+          remove.title = '제거';
+          remove.textContent = '×';
+          remove.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeItem(it.id);
+          });
+          actions.appendChild(remove);
+          cell.appendChild(actions);
+
+          if (it.status === 'error' && it.error) {
+            const tip = document.createElement('div');
+            tip.className = 'thumb-error-tip';
+            tip.textContent = it.error;
+            cell.appendChild(tip);
+          }
+          gridEl.appendChild(cell);
+        }
+      }
+
+      function addFiles(fileList) {
+        const files = Array.from(fileList || []);
+        for (const file of files) {
+          const id = nextId++;
+          if (!file.type || !file.type.startsWith('image/')) {
+            items.push({
+              id, name: file.name, status: 'error',
+              error: '이미지 파일만 업로드할 수 있습니다.',
+            });
+            continue;
+          }
+          if (file.size > MAX_FILE_BYTES) {
+            items.push({
+              id, name: file.name, status: 'error',
+              error: '파일 크기가 10MB를 초과합니다.',
+            });
+            continue;
+          }
+          const localUrl = URL.createObjectURL(file);
+          const item = {
+            id, file, localUrl, name: file.name, status: 'uploading',
+          };
+          items.push(item);
+          uploadItem(item);
+        }
+        render();
+      }
+
+      async function uploadItem(item) {
+        try {
+          const result = await uploadToImageKit(item.file);
+          item.status = 'success';
+          item.url = result.url;
+          item.fileId = result.fileId || '';
+          item.thumbnailUrl = result.thumbnailUrl || result.url;
+        } catch (err) {
+          item.status = 'error';
+          item.error = err.message || '업로드 실패';
+        } finally {
+          render();
+        }
+      }
+
+      function retryItem(id) {
+        const it = items.find((x) => x.id === id);
+        if (!it || !it.file) return;
+        it.status = 'uploading';
+        it.error = undefined;
+        render();
+        uploadItem(it);
+      }
+
+      function removeItem(id) {
+        const idx = items.findIndex((x) => x.id === id);
+        if (idx === -1) return;
+        const [removed] = items.splice(idx, 1);
+        if (removed && removed.localUrl) URL.revokeObjectURL(removed.localUrl);
+        render();
+      }
+
+      function clear() {
+        for (const it of items) {
+          if (it.localUrl) URL.revokeObjectURL(it.localUrl);
+        }
+        items.length = 0;
+        render();
+      }
+
+      function setExisting(images) {
+        clear();
+        const list = Array.isArray(images) ? images : [];
+        for (const img of list) {
+          if (!img || !img.url) continue;
+          items.push({
+            id: nextId++,
+            name: img.name || '',
+            status: 'success',
+            url: img.url,
+            fileId: img.fileId || '',
+            thumbnailUrl: img.thumbnailUrl || img.url,
+          });
+        }
+        render();
+      }
+
+      function getSuccessfulImages() {
+        return items
+          .filter((it) => it.status === 'success' && it.url)
+          .map((it) => ({
+            url: it.url,
+            fileId: it.fileId || '',
+            thumbnailUrl: it.thumbnailUrl || it.url,
+            name: it.name || '',
+          }));
+      }
+
+      function isBusy() {
+        return items.some((it) => it.status === 'uploading');
+      }
+
+      // Wire events
+      zoneEl.addEventListener('click', () => inputEl.click());
+      zoneEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          inputEl.click();
+        }
+      });
+      inputEl.addEventListener('change', () => {
+        if (inputEl.files && inputEl.files.length) addFiles(inputEl.files);
+        inputEl.value = '';
+      });
+      ;['dragenter', 'dragover'].forEach((ev) =>
+        zoneEl.addEventListener(ev, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          zoneEl.classList.add('dragover');
+        })
+      );
+      ;['dragleave', 'drop'].forEach((ev) =>
+        zoneEl.addEventListener(ev, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          zoneEl.classList.remove('dragover');
+        })
+      );
+      zoneEl.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        if (dt && dt.files && dt.files.length) addFiles(dt.files);
+      });
+
+      return { addFiles, clear, setExisting, getSuccessfulImages, isBusy };
+    }
+
+    const newDz = createDropzone({
+      zoneEl: $('#new-dropzone'),
+      inputEl: $('#new-file-input'),
+      gridEl: $('#new-thumb-grid'),
+    });
+    const editDz = createDropzone({
+      zoneEl: $('#edit-dropzone'),
+      inputEl: $('#edit-file-input'),
+      gridEl: $('#edit-thumb-grid'),
+    });
+
+    // ---- Color picker handlers ----
+    function bindColorPicker(container, getValue, setValue) {
+      container.addEventListener('click', (e) => {
+        const dot = e.target.closest('.color-dot');
+        if (!dot) return;
+        const color = dot.dataset.color;
+        setValue(color);
+        $$('.color-dot', container).forEach((d) =>
+          d.classList.toggle('active', d.dataset.color === color)
+        );
+      });
+    }
+    bindColorPicker(colorPicker, () => selectedColor, (c) => (selectedColor = c));
+    bindColorPicker(editColorPicker, () => editingColor, (c) => (editingColor = c));
+
+    // ---- API ----
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    // ---- Render ----
+    function formatDate(iso) {
+      const d = new Date(iso);
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      if (sameDay) {
+        return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      }
+      return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+    }
+
+    function renderMemos(memos) {
+      grid.innerHTML = '';
+      empty.style.display = memos.length ? 'none' : 'block';
+      for (const m of memos) {
+        const el = document.createElement('div');
+        el.className = 'memo';
+        el.dataset.color = m.color;
+        el.dataset.id = m.id;
+
+        if (m.title) {
+          const titleEl = document.createElement('div');
+          titleEl.className = 'memo-title';
+          titleEl.textContent = m.title;
+          el.appendChild(titleEl);
+        }
+
+        const contentEl = document.createElement('div');
+        contentEl.className = 'memo-content';
+        contentEl.textContent = m.content;
+        el.appendChild(contentEl);
+
+        // Image thumbnails (max 3 visible + "+N" badge)
+        const imgs = Array.isArray(m.images) ? m.images : [];
+        if (imgs.length) {
+          const shown = imgs.slice(0, 3);
+          const imagesEl = document.createElement('div');
+          imagesEl.className = 'memo-images';
+          imagesEl.dataset.count = String(Math.min(shown.length, 3));
+          shown.forEach((img, idx) => {
+            const box = document.createElement('div');
+            box.className = 'memo-img';
+            const imgTag = document.createElement('img');
+            imgTag.src = img.thumbnailUrl || img.url;
+            imgTag.alt = img.name || '';
+            imgTag.loading = 'lazy';
+            box.appendChild(imgTag);
+            if (idx === 2 && imgs.length > 3) {
+              const more = document.createElement('div');
+              more.className = 'more-badge';
+              more.textContent = `+${imgs.length - 3}`;
+              box.appendChild(more);
+            }
+            box.addEventListener('click', (e) => {
+              e.stopPropagation();
+              window.open(img.url, '_blank', 'noopener');
+            });
+            imagesEl.appendChild(box);
+          });
+          el.appendChild(imagesEl);
+        }
+
+        const footer = document.createElement('div');
+        footer.className = 'memo-footer';
+        const dateSpan = document.createElement('span');
+        dateSpan.textContent = formatDate(m.updated_at);
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-btn';
+        delBtn.textContent = '삭제';
+        footer.appendChild(dateSpan);
+        footer.appendChild(delBtn);
+        el.appendChild(footer);
+
+        delBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (!confirm('이 메모를 삭제할까요?')) return;
+          try {
+            await api(`/api/memos/${m.id}`, { method: 'DELETE' });
+            el.remove();
+            if (!grid.children.length) empty.style.display = 'block';
+          } catch (err) {
+            alert(err.message);
+          }
+        });
+
+        el.addEventListener('click', () => openEdit(m));
+        grid.appendChild(el);
+      }
+    }
+
+    async function load(q = '') {
+      try {
+        const url = q ? `/api/memos?q=${encodeURIComponent(q)}` : '/api/memos';
+        const memos = await api(url);
+        renderMemos(memos);
+      } catch (err) {
+        alert('불러오기 실패: ' + err.message);
+      }
+    }
+
+    // ---- Create ----
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = form.title.value.trim();
+      const content = form.content.value;
+      const images = newDz.getSuccessfulImages();
+      if (!title && !content.trim() && images.length === 0) return;
+      if (newDz.isBusy()) {
+        toast('이미지 업로드 중입니다…');
+        return;
+      }
+      try {
+        await api('/api/memos', {
+          method: 'POST',
+          body: JSON.stringify({ title, content, color: selectedColor, images }),
+        });
+        form.reset();
+        newDz.clear();
+        selectedColor = 'yellow';
+        $$('.color-dot', colorPicker).forEach((d) =>
+          d.classList.toggle('active', d.dataset.color === 'yellow')
+        );
+        await load(search.value.trim());
+      } catch (err) {
+        alert('저장 실패: ' + err.message);
+      }
+    });
+
+    // ---- Edit modal ----
+    function openEdit(memo) {
+      editingId = memo.id;
+      editingColor = memo.color;
+      editTitle.value = memo.title;
+      editContent.value = memo.content;
+      editDz.setExisting(memo.images);
+      $$('.color-dot', editColorPicker).forEach((d) =>
+        d.classList.toggle('active', d.dataset.color === memo.color)
+      );
+      modal.classList.add('show');
+      editTitle.focus();
+    }
+    function closeEdit() {
+      modal.classList.remove('show');
+      editingId = null;
+      editDz.clear();
+    }
+    $('#edit-cancel').addEventListener('click', closeEdit);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeEdit();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.classList.contains('show')) closeEdit();
+    });
+    $('#edit-save').addEventListener('click', async () => {
+      if (editingId == null) return;
+      if (editDz.isBusy()) {
+        toast('이미지 업로드 중입니다…');
+        return;
+      }
+      const title = editTitle.value.trim();
+      const content = editContent.value;
+      const images = editDz.getSuccessfulImages();
+      try {
+        await api(`/api/memos/${editingId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ title, content, color: editingColor, images }),
+        });
+        closeEdit();
+        await load(search.value.trim());
+      } catch (err) {
+        alert('저장 실패: ' + err.message);
+      }
+    });
+
+    // ---- Search (debounced) ----
+    search.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => load(search.value.trim()), 200);
+    });
+
+    // ---- Init ----
+    load();
+  </script>
+</body>
+</html>

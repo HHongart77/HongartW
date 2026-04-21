@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LUMIÈRE — 공간을 빛으로 완성하다</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    html, body { font-family: 'Inter', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; }
+    .font-display { font-family: 'Playfair Display', 'Cormorant Garamond', serif; letter-spacing: -0.01em; }
+    .font-serif-alt { font-family: 'Cormorant Garamond', serif; }
+
+    /* Smooth scroll */
+    html { scroll-behavior: smooth; }
+
+    /* Remove default focus outline, use custom */
+    *:focus { outline: none; }
+    *:focus-visible { outline: 2px solid #d97706; outline-offset: 2px; }
+
+    /* Image zoom on card hover */
+    .card-img-wrap { overflow: hidden; }
+    .card-img { transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+    .group:hover .card-img { transform: scale(1.06); }
+
+    /* Toast slide-in */
+    @keyframes slideInRight {
+      from { transform: translateX(120%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .toast-in { animation: slideInRight 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+    /* Hero fade-up */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.8s ease-out both; }
+    .fade-up-d1 { animation-delay: 0.1s; }
+    .fade-up-d2 { animation-delay: 0.25s; }
+    .fade-up-d3 { animation-delay: 0.4s; }
+
+    /* Hide scrollbar for chip row */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Subtle link underline hover */
+    .link-underline { position: relative; }
+    .link-underline::after {
+      content: ''; position: absolute; left: 0; right: 0; bottom: -3px;
+      height: 1px; background: currentColor; transform: scaleX(0);
+      transform-origin: right; transition: transform 0.35s ease;
+    }
+    .link-underline:hover::after { transform: scaleX(1); transform-origin: left; }
+  </style>
+</head>
+<body class="bg-stone-50 text-stone-900 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="env,react">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useMemo, useCallback, useContext, createContext, useRef, useReducer } = React;
+
+    // ========================================
+    // 🧾 PRODUCT DATA
+    // ========================================
+    const PRODUCTS = [
+      {
+        id: 'p01',
+        name: '오로라 펜던트',
+        subtitle: 'Aurora Pendant',
+        category: '펜던트',
+        price: 289000,
+        originalPrice: 339000,
+        image: './images/pendant-01.jpg',
+        description: '따뜻한 황동 프레임과 수제 블로운 글래스가 만들어내는 잔잔한 빛. 다이닝 공간을 한순간에 바꾸는, 미니멀리즘의 완성형 펜던트 조명입니다.',
+        specs: {
+          '소재': '황동 / 프로스트 글래스',
+          '크기': 'Ø 280 × H 320 mm',
+          '전구': 'E26 LED (최대 40W)',
+          '색온도': '2700K 웜 화이트',
+          '코드 길이': '1.5m (조절 가능)',
+        },
+        stock: 12,
+        isNew: true,
+        isBest: true,
+      },
+      {
+        id: 'p02',
+        name: '노르딕 트라이포드',
+        subtitle: 'Nordic Tripod Floor',
+        category: '플로어',
+        price: 459000,
+        image: './images/floor-01.jpg',
+        description: '핀란드산 자작나무 삼각대에 자연 표백한 린넨 쉐이드를 올렸습니다. 거실 한 켠에서 조용히 빛나는, 북유럽 감성의 스탠드 조명.',
+        specs: {
+          '소재': '자작나무 원목 / 린넨',
+          '높이': 'H 1,580 mm',
+          '쉐이드': 'Ø 450 mm',
+          '전구': 'E26 LED (최대 60W)',
+          '색온도': '3000K 웜 화이트',
+        },
+        stock: 7,
+        isNew: false,
+        isBest: true,
+      },
+      {
+        id: 'p03',
+        name: '마블 로즈',
+        subtitle: 'Marble Rose Table',
+        category: '테이블',
+        price: 329000,
+        image: './images/table-01.jpg',
+        description: '이탈리아산 카라라 대리석 베이스에 로즈골드 디테일과 아이보리 패브릭 쉐이드를 매치했습니다. 침실 협탁 위 가장 우아한 한 점.',
+        specs: {
+          '소재': '카라라 대리석 / 로즈골드 메탈 / 린넨',
+          '높이': 'H 520 mm',
+          '베이스': 'Ø 180 mm',
+          '전구': 'E26 LED (최대 40W)',
+          '색온도': '2700K 웜 화이트',
+        },
+        stock: 18,
+        isNew: true,
+        isBest: false,
+      },
+      {
+        id: 'p04',
+        name: '베르사유 크리스털',
+        subtitle: 'Versailles Crystal',
+        category: '샹들리에',
+        price: 1290000,
+        originalPrice: 1490000,
+        image: './images/chandelier-01.jpg',
+        description: '3단으로 흐르는 K9 크리스털과 앤틱 골드 프레임이 고전적 드라마를 완성합니다. 높은 천장의 거실, 다이닝, 라운지를 위한 시그니처 피스.',
+        specs: {
+          '소재': 'K9 크리스털 / 앤틱 골드 메탈',
+          '크기': 'Ø 760 × H 820 mm',
+          '전구': 'E14 × 12구',
+          '색온도': '2700K 웜 화이트',
+          '무게': '약 14kg',
+        },
+        stock: 4,
+        isNew: false,
+        isBest: true,
+      },
+      {
+        id: 'p05',
+        name: '루미에르 월',
+        subtitle: 'Lumière Wall Sconce',
+        category: '벽조명',
+        price: 189000,
+        image: './images/wall-01.jpg',
+        description: '매트 블랙 아이언과 브라스 액센트의 기하학적 실루엣. 복도, 침실, 거실 어느 벽에도 은은한 무드를 더해주는 간접 조명.',
+        specs: {
+          '소재': '스틸 파우더 코팅 / 브라스',
+          '크기': 'W 140 × H 260 × D 120 mm',
+          '전구': 'G9 LED (최대 25W)',
+          '색온도': '3000K 웜 화이트',
+          '설치': '직결식 (전기공사 권장)',
+        },
+        stock: 25,
+        isNew: true,
+        isBest: false,
+      },
+      {
+        id: 'p06',
+        name: '아티잔 데스크',
+        subtitle: 'Artisan Desk Lamp',
+        category: '데스크',
+        price: 229000,
+        image: './images/desk-01.jpg',
+        description: '장인의 손길이 느껴지는 관절형 팔과 가중치 베이스. 책상 위 어디든 빛의 각도를 자유롭게 조절할 수 있는 작업자의 램프.',
+        specs: {
+          '소재': '알루미늄 / 철제 베이스',
+          '암 길이': '최대 900 mm',
+          '전구': 'E26 LED (최대 40W)',
+          '색온도': '4000K 내추럴 화이트',
+          '스위치': '인라인 로터리 디머',
+        },
+        stock: 15,
+        isNew: false,
+        isBest: true,
+      },
+      {
+        id: 'p07',
+        name: '링 오브 라이트',
+        subtitle: 'Ring of Light',
+        category: '천장',
+        price: 549000,
+        image: './images/ceiling-01.jpg',
+        description: '헤어라인 알루미늄으로 마감한 링 실루엣과 완전 간접광이 만드는 미래적 미니멀리즘. 거실 메인 조명의 새로운 기준.',
+        specs: {
+          '소재': '알루미늄 / 아크릴 디퓨저',
+          '크기': 'Ø 800 × H 80 mm',
+          '전구': '내장 LED 60W',
+          '색온도': '3000K / 4000K / 6500K (3단)',
+          '밝기': '3,900 루멘 (디밍)',
+        },
+        stock: 9,
+        isNew: true,
+        isBest: false,
+      },
+      {
+        id: 'p08',
+        name: '가든 랜턴',
+        subtitle: 'Garden Lantern',
+        category: '야외',
+        price: 149000,
+        originalPrice: 179000,
+        image: './images/outdoor-01.jpg',
+        description: '블랙 아이언 프레임과 앰버 시드 글래스가 어둠 속에서 부드럽게 반짝입니다. 정원, 테라스, 현관 입구를 위한 빈티지 방수 조명.',
+        specs: {
+          '소재': '아이언 / 앰버 시드 글래스',
+          '크기': 'W 180 × H 320 × D 180 mm',
+          '전구': 'E26 LED (최대 40W)',
+          '방수 등급': 'IP44',
+          '설치': '벽부형 (앵커 포함)',
+        },
+        stock: 32,
+        isNew: false,
+        isBest: false,
+      },
+    ];
+
+    const CATEGORIES = ['전체', '펜던트', '플로어', '테이블', '샹들리에', '벽조명', '데스크', '천장', '야외'];
+
+    // ========================================
+    // 🔧 Utilities
+    // ========================================
+    const formatKRW = (n) => '₩' + Number(n).toLocaleString('ko-KR');
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    function Button({ variant = 'primary', size = 'md', className = '', disabled, children, ...rest }) {
+      const base = 'inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 select-none disabled:opacity-40 disabled:cursor-not-allowed';
+      const sizes = {
+        sm: 'px-4 py-2 text-xs tracking-wide',
+        md: 'px-6 py-3 text-sm tracking-wide',
+        lg: 'px-8 py-4 text-base tracking-wide',
+      };
+      const variants = {
+        primary: 'bg-stone-900 text-white hover:bg-amber-600 rounded-none',
+        secondary: 'bg-white text-stone-900 border border-stone-300 hover:border-stone-900 rounded-none',
+        danger: 'bg-red-600 text-white hover:bg-red-700 rounded-none',
+        ghost: 'bg-transparent text-stone-700 hover:text-amber-600 rounded-none',
+        gold: 'bg-amber-600 text-white hover:bg-amber-700 rounded-none',
+      };
+      return (
+        <button
+          disabled={disabled}
+          className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
+          {...rest}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ label, error, className = '', ...rest }) {
+      return (
+        <div className="flex flex-col gap-1.5">
+          {label && <label className="text-xs font-medium tracking-wide text-stone-600 uppercase">{label}</label>}
+          <input
+            className={`w-full px-4 py-3 bg-white border text-sm text-stone-900 placeholder:text-stone-400 transition-colors
+              ${error ? 'border-red-500' : 'border-stone-300 focus:border-stone-900'} ${className}`}
+            {...rest}
+          />
+          {error && <span className="text-xs text-red-600">{error}</span>}
+        </div>
+      );
+    }
+
+    function Card({ children, className = '', onClick }) {
+      return (
+        <div onClick={onClick} className={`bg-white ${onClick ? 'cursor-pointer' : ''} ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Badge({ children, variant = 'default', className = '' }) {
+      const variants = {
+        default: 'bg-stone-900 text-white',
+        gold: 'bg-amber-600 text-white',
+        light: 'bg-white text-stone-900 border border-stone-300',
+        sale: 'bg-red-600 text-white',
+      };
+      return (
+        <span className={`inline-block px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] uppercase ${variants[variant]} ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Modal({ isOpen, onClose, title, children, size = 'md' }) {
+      if (!isOpen) return null;
+      const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl' };
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60" onClick={onClose}>
+          <div onClick={(e) => e.stopPropagation()} className={`bg-white w-full ${sizes[size]} p-8`}>
+            {title && <h3 className="font-display text-2xl mb-4">{title}</h3>}
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🔀 Router
+    // ========================================
+    const RouterContext = createContext(null);
+
+    function matchRoute(pattern, path) {
+      const pSegs = pattern.split('/').filter(Boolean);
+      const aSegs = path.split('/').filter(Boolean);
+      if (pSegs.length !== aSegs.length) return null;
+      const params = {};
+      for (let i = 0; i < pSegs.length; i++) {
+        if (pSegs[i].startsWith(':')) params[pSegs[i].slice(1)] = decodeURIComponent(aSegs[i]);
+        else if (pSegs[i] !== aSegs[i]) return null;
+      }
+      return params;
+    }
+
+    function Router({ children }) {
+      const [path, setPath] = useState(() => (window.location.hash || '#/').slice(1) || '/');
+      useEffect(() => {
+        const onHash = () => setPath((window.location.hash || '#/').slice(1) || '/');
+        window.addEventListener('hashchange', onHash);
+        return () => window.removeEventListener('hashchange', onHash);
+      }, []);
+      useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [path]);
+      const navigate = useCallback((to) => { window.location.hash = to.startsWith('#') ? to : '#' + to; }, []);
+      return (
+        <RouterContext.Provider value={{ path, navigate, params: {} }}>
+          {children}
+        </RouterContext.Provider>
+      );
+    }
+
+    function Routes({ children }) {
+      const ctx = useContext(RouterContext);
+      const arr = React.Children.toArray(children);
+      for (const child of arr) {
+        const params = matchRoute(child.props.path, ctx.path);
+        if (params) {
+          return (
+            <RouterContext.Provider value={{ ...ctx, params }}>
+              {child.props.element}
+            </RouterContext.Provider>
+          );
+        }
+      }
+      const fallback = arr.find((c) => c.props.path === '*');
+      return fallback ? fallback.props.element : null;
+    }
+
+    function Route() { return null; }
+
+    function Link({ to, children, className = '', onClick, ...rest }) {
+      const { navigate } = useContext(RouterContext);
+      const handle = (e) => {
+        e.preventDefault();
+        if (onClick) onClick(e);
+        navigate(to);
+      };
+      return (
+        <a href={'#' + to} onClick={handle} className={className} {...rest}>
+          {children}
+        </a>
+      );
+    }
+
+    function useRouter() { return useContext(RouterContext); }
+    function useParams() { return useContext(RouterContext).params; }
+
+    // ========================================
+    // 🛒 Cart Context (localStorage)
+    // ========================================
+    const CartContext = createContext(null);
+    const CART_KEY = 'lumiere_cart';
+
+    function CartProvider({ children }) {
+      const [items, setItems] = useState(() => {
+        try {
+          const raw = localStorage.getItem(CART_KEY);
+          return raw ? JSON.parse(raw) : [];
+        } catch { return []; }
+      });
+      useEffect(() => {
+        try { localStorage.setItem(CART_KEY, JSON.stringify(items)); } catch {}
+      }, [items]);
+
+      const addItem = useCallback((id, quantity = 1) => {
+        setItems((prev) => {
+          const found = prev.find((x) => x.id === id);
+          if (found) return prev.map((x) => x.id === id ? { ...x, quantity: x.quantity + quantity } : x);
+          return [...prev, { id, quantity }];
+        });
+      }, []);
+      const removeItem = useCallback((id) => setItems((prev) => prev.filter((x) => x.id !== id)), []);
+      const updateQty = useCallback((id, quantity) => {
+        setItems((prev) => prev.map((x) => x.id === id ? { ...x, quantity: Math.max(1, quantity) } : x));
+      }, []);
+      const clear = useCallback(() => setItems([]), []);
+      const count = useMemo(() => items.reduce((a, b) => a + b.quantity, 0), [items]);
+
+      return (
+        <CartContext.Provider value={{ items, addItem, removeItem, updateQty, clear, count }}>
+          {children}
+        </CartContext.Provider>
+      );
+    }
+
+    function useCart() { return useContext(CartContext); }
+
+    // ========================================
+    // 🔔 Toast Context
+    // ========================================
+    const ToastContext = createContext(null);
+    function ToastProvider({ children }) {
+      const [toasts, setToasts] = useState([]);
+      const push = useCallback((msg) => {
+        const id = Math.random().toString(36).slice(2);
+        setToasts((prev) => [...prev, { id, msg }]);
+        setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2800);
+      }, []);
+      return (
+        <ToastContext.Provider value={{ push }}>
+          {children}
+          <div className="fixed top-24 right-6 z-50 flex flex-col gap-2 pointer-events-none">
+            {toasts.map((t) => (
+              <div key={t.id} className="toast-in bg-stone-900 text-white px-5 py-3 shadow-2xl text-sm flex items-center gap-3 pointer-events-auto">
+                <svg className="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                {t.msg}
+              </div>
+            ))}
+          </div>
+        </ToastContext.Provider>
+      );
+    }
+    function useToast() { return useContext(ToastContext); }
+
+    // ========================================
+    // 🧩 Layout: Header
+    // ========================================
+    function Header() {
+      const { count } = useCart();
+      const { path } = useRouter();
+      const [mobileOpen, setMobileOpen] = useState(false);
+
+      useEffect(() => { setMobileOpen(false); }, [path]);
+
+      const navItems = [
+        { to: '/', label: '홈' },
+        { to: '/products', label: '제품' },
+        { to: '/about', label: '브랜드' },
+      ];
+
+      const isActive = (to) => to === '/' ? path === '/' : path.startsWith(to);
+
+      return (
+        <header className="sticky top-0 z-40 bg-stone-50/90 backdrop-blur-md border-b border-stone-200">
+          <div className="max-w-7xl mx-auto px-6 lg:px-10">
+            <div className="flex items-center justify-between h-20">
+              <Link to="/" className="font-display text-2xl tracking-[0.15em] text-stone-900">
+                LUMIÈRE
+              </Link>
+
+              <nav className="hidden md:flex items-center gap-10">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={`link-underline text-sm tracking-wider uppercase transition-colors ${isActive(item.to) ? 'text-amber-600' : 'text-stone-700 hover:text-stone-900'}`}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+
+              <div className="flex items-center gap-5">
+                <button aria-label="검색" className="hidden md:flex text-stone-700 hover:text-amber-600 transition-colors">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <circle cx="11" cy="11" r="7" /><line x1="20" y1="20" x2="16.5" y2="16.5" />
+                  </svg>
+                </button>
+                <Link to="/cart" className="relative text-stone-700 hover:text-amber-600 transition-colors" aria-label="장바구니">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <path d="M16 10a4 4 0 01-8 0" />
+                  </svg>
+                  {count > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-amber-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">
+                      {count}
+                    </span>
+                  )}
+                </Link>
+                <button onClick={() => setMobileOpen((o) => !o)} className="md:hidden text-stone-700" aria-label="메뉴">
+                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    {mobileOpen
+                      ? <path d="M6 6l12 12M6 18L18 6" />
+                      : <><line x1="3" y1="8" x2="21" y2="8" /><line x1="3" y1="16" x2="21" y2="16" /></>
+                    }
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {mobileOpen && (
+              <div className="md:hidden border-t border-stone-200 py-4 flex flex-col gap-1">
+                {navItems.map((item) => (
+                  <Link key={item.to} to={item.to}
+                    className={`px-2 py-3 text-sm tracking-wider uppercase ${isActive(item.to) ? 'text-amber-600' : 'text-stone-700'}`}>
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </header>
+      );
+    }
+
+    // ========================================
+    // 🧩 Layout: Footer
+    // ========================================
+    function Footer() {
+      return (
+        <footer className="bg-stone-900 text-stone-300 mt-24">
+          <div className="max-w-7xl mx-auto px-6 lg:px-10 py-16 grid grid-cols-2 md:grid-cols-4 gap-10">
+            <div className="col-span-2 md:col-span-1">
+              <div className="font-display text-2xl tracking-[0.15em] text-white mb-3">LUMIÈRE</div>
+              <p className="text-xs text-stone-400 leading-relaxed">공간을 빛으로 완성하는<br />프리미엄 조명 브랜드</p>
+            </div>
+            <div>
+              <h4 className="text-white text-sm font-semibold mb-4 tracking-wider uppercase">고객센터</h4>
+              <ul className="space-y-2 text-xs text-stone-400">
+                <li>평일 10:00 — 18:00</li>
+                <li>토·일·공휴일 휴무</li>
+                <li className="text-white text-base font-display tracking-wider">1588-0000</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white text-sm font-semibold mb-4 tracking-wider uppercase">정책</h4>
+              <ul className="space-y-2 text-xs text-stone-400">
+                <li><a href="#" className="hover:text-amber-400">이용약관</a></li>
+                <li><a href="#" className="hover:text-amber-400">개인정보 처리방침</a></li>
+                <li><a href="#" className="hover:text-amber-400">배송·반품 안내</a></li>
+                <li><a href="#" className="hover:text-amber-400">A/S 신청</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white text-sm font-semibold mb-4 tracking-wider uppercase">SNS</h4>
+              <ul className="space-y-2 text-xs text-stone-400">
+                <li><a href="#" className="hover:text-amber-400">Instagram</a></li>
+                <li><a href="#" className="hover:text-amber-400">YouTube</a></li>
+                <li><a href="#" className="hover:text-amber-400">Pinterest</a></li>
+                <li><a href="#" className="hover:text-amber-400">Newsletter</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-stone-800 py-6 text-center text-[11px] text-stone-500">
+            © 2026 LUMIÈRE Lighting Co. · 사업자번호 000-00-00000 · 대표 김루미
+          </div>
+        </footer>
+      );
+    }
+
+    // ========================================
+    // 🛍 Product Card
+    // ========================================
+    function ProductCard({ product }) {
+      const { addItem } = useCart();
+      const { push } = useToast();
+      const { navigate } = useRouter();
+
+      const onQuickAdd = (e) => {
+        e.stopPropagation();
+        addItem(product.id, 1);
+        push(`${product.name} — 장바구니에 담았습니다`);
+      };
+
+      return (
+        <div className="group cursor-pointer" onClick={() => navigate(`/product/${product.id}`)}>
+          <div className="relative card-img-wrap bg-stone-100 aspect-[4/5]">
+            <img src={product.image} alt={product.name} className="card-img w-full h-full object-cover" loading="lazy" />
+            <div className="absolute top-3 left-3 flex gap-1.5">
+              {product.isNew && <Badge variant="gold">NEW</Badge>}
+              {product.isBest && <Badge variant="default">BEST</Badge>}
+              {product.originalPrice && <Badge variant="sale">SALE</Badge>}
+            </div>
+            <button
+              onClick={onQuickAdd}
+              className="absolute bottom-0 left-0 right-0 bg-stone-900 text-white text-xs tracking-widest uppercase py-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300"
+            >
+              장바구니 담기
+            </button>
+          </div>
+          <div className="pt-4 pb-2">
+            <div className="text-[11px] tracking-[0.15em] uppercase text-stone-500 mb-1">{product.category}</div>
+            <h3 className="font-display text-lg text-stone-900 mb-1">{product.name}</h3>
+            <div className="text-xs text-stone-500 italic mb-2">{product.subtitle}</div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-base font-semibold text-stone-900">{formatKRW(product.price)}</span>
+              {product.originalPrice && (
+                <span className="text-xs text-stone-400 line-through">{formatKRW(product.originalPrice)}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Page: Home
+    // ========================================
+    function HomePage() {
+      const featured = useMemo(() => PRODUCTS.filter((p) => p.isBest).slice(0, 4), []);
+      const newArrivals = useMemo(() => PRODUCTS.filter((p) => p.isNew).slice(0, 4), []);
+
+      return (
+        <div>
+          {/* Hero */}
+          <section className="relative h-[82vh] min-h-[540px] overflow-hidden">
+            <img src="./images/hero-banner.jpg" alt="LUMIÈRE" className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-b from-stone-900/40 via-stone-900/30 to-stone-900/70" />
+            <div className="relative z-10 h-full max-w-7xl mx-auto px-6 lg:px-10 flex flex-col justify-center text-white">
+              <div className="fade-up fade-up-d1 text-[11px] tracking-[0.35em] uppercase text-amber-300 mb-4">
+                2026 Spring Collection
+              </div>
+              <h1 className="fade-up fade-up-d2 font-display text-5xl md:text-7xl lg:text-8xl leading-[1.05] max-w-3xl">
+                공간을 빛으로<br />완성하다
+              </h1>
+              <p className="fade-up fade-up-d3 mt-6 max-w-xl text-stone-200 text-base md:text-lg leading-relaxed">
+                하나의 조명이 바꾸는 공간의 온도.<br />
+                LUMIÈRE가 제안하는, 빛의 방식에 대한 이야기.
+              </p>
+              <div className="fade-up fade-up-d3 mt-10 flex gap-4">
+                <Link to="/products">
+                  <Button variant="gold" size="lg">제품 전체 보기</Button>
+                </Link>
+                <Link to="/about">
+                  <Button variant="secondary" size="lg" className="bg-transparent text-white border-white hover:bg-white hover:text-stone-900">
+                    브랜드 스토리
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          {/* Featured Products */}
+          <section className="max-w-7xl mx-auto px-6 lg:px-10 py-24">
+            <div className="flex items-end justify-between mb-12">
+              <div>
+                <div className="text-xs tracking-[0.25em] uppercase text-amber-600 mb-3">Featured</div>
+                <h2 className="font-display text-4xl md:text-5xl">베스트셀러</h2>
+              </div>
+              <Link to="/products" className="hidden md:inline-block text-sm tracking-wider uppercase link-underline text-stone-700">
+                전체 보기 →
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+              {featured.map((p) => <ProductCard key={p.id} product={p} />)}
+            </div>
+          </section>
+
+          {/* Category grid */}
+          <section className="bg-stone-100 py-24">
+            <div className="max-w-7xl mx-auto px-6 lg:px-10">
+              <div className="text-center mb-12">
+                <div className="text-xs tracking-[0.25em] uppercase text-amber-600 mb-3">Collections</div>
+                <h2 className="font-display text-4xl md:text-5xl">카테고리별 둘러보기</h2>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+                {[
+                  { cat: '펜던트', img: './images/pendant-01.jpg' },
+                  { cat: '샹들리에', img: './images/chandelier-01.jpg' },
+                  { cat: '플로어', img: './images/floor-01.jpg' },
+                  { cat: '테이블', img: './images/table-01.jpg' },
+                ].map((c) => (
+                  <Link key={c.cat} to={`/products?cat=${encodeURIComponent(c.cat)}`} className="group block relative aspect-[3/4] overflow-hidden">
+                    <img src={c.img} alt={c.cat} className="card-img w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-stone-900/70 to-transparent" />
+                    <div className="absolute bottom-5 left-5 right-5 text-white">
+                      <div className="font-display text-2xl md:text-3xl">{c.cat}</div>
+                      <div className="text-xs tracking-[0.2em] uppercase text-stone-300 mt-1">Shop Now →</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* New arrivals */}
+          <section className="max-w-7xl mx-auto px-6 lg:px-10 py-24">
+            <div className="flex items-end justify-between mb-12">
+              <div>
+                <div className="text-xs tracking-[0.25em] uppercase text-amber-600 mb-3">Just In</div>
+                <h2 className="font-display text-4xl md:text-5xl">신상품</h2>
+              </div>
+              <Link to="/products" className="hidden md:inline-block text-sm tracking-wider uppercase link-underline text-stone-700">
+                전체 보기 →
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+              {newArrivals.map((p) => <ProductCard key={p.id} product={p} />)}
+            </div>
+          </section>
+
+          {/* Brand story teaser */}
+          <section className="bg-stone-900 text-stone-100 py-28">
+            <div className="max-w-5xl mx-auto px-6 lg:px-10 text-center">
+              <div className="text-xs tracking-[0.3em] uppercase text-amber-400 mb-6">Our Philosophy</div>
+              <h2 className="font-display text-4xl md:text-6xl leading-tight mb-8">
+                "빛은 가구가 아닙니다.<br />그 공간의 감정입니다."
+              </h2>
+              <p className="text-stone-300 leading-relaxed max-w-2xl mx-auto">
+                LUMIÈRE는 프랑스어로 '빛'을 의미합니다. 저희는 조명을 단순한 도구가 아닌,
+                하루를 마무리하는 온기이자 다시 집으로 돌아오고 싶게 만드는 신호로 생각합니다.
+              </p>
+              <div className="mt-10">
+                <Link to="/about">
+                  <Button variant="gold" size="lg">브랜드 이야기 보기</Button>
+                </Link>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Page: Products (list)
+    // ========================================
+    function ProductsPage() {
+      const { path } = useRouter();
+      const initialCat = useMemo(() => {
+        const q = path.split('?')[1] || '';
+        const params = new URLSearchParams(q);
+        return params.get('cat') || '전체';
+      }, [path]);
+
+      const [category, setCategory] = useState(initialCat);
+      const [sort, setSort] = useState('popular');
+      const [search, setSearch] = useState('');
+
+      useEffect(() => { setCategory(initialCat); }, [initialCat]);
+
+      const filtered = useMemo(() => {
+        let list = [...PRODUCTS];
+        if (category !== '전체') list = list.filter((p) => p.category === category);
+        if (search.trim()) {
+          const q = search.trim().toLowerCase();
+          list = list.filter((p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.subtitle.toLowerCase().includes(q) ||
+            p.category.toLowerCase().includes(q)
+          );
+        }
+        switch (sort) {
+          case 'price-asc': list.sort((a, b) => a.price - b.price); break;
+          case 'price-desc': list.sort((a, b) => b.price - a.price); break;
+          case 'latest': list.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)); break;
+          case 'popular': default: list.sort((a, b) => (b.isBest ? 1 : 0) - (a.isBest ? 1 : 0)); break;
+        }
+        return list;
+      }, [category, sort, search]);
+
+      return (
+        <div className="max-w-7xl mx-auto px-6 lg:px-10 py-16">
+          <div className="mb-10 text-center">
+            <div className="text-xs tracking-[0.25em] uppercase text-amber-600 mb-3">Collection</div>
+            <h1 className="font-display text-4xl md:text-5xl mb-4">전체 제품</h1>
+            <p className="text-stone-600 max-w-xl mx-auto text-sm">공간의 온도를 완성하는 LUMIÈRE의 컬렉션을 만나보세요.</p>
+          </div>
+
+          {/* Filter bar */}
+          <div className="flex flex-col gap-5 mb-10">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              {CATEGORIES.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setCategory(c)}
+                  className={`whitespace-nowrap px-5 py-2.5 text-xs tracking-wider uppercase border transition-colors
+                    ${category === c
+                      ? 'bg-stone-900 text-white border-stone-900'
+                      : 'bg-white text-stone-600 border-stone-300 hover:border-stone-900 hover:text-stone-900'}`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+              <div className="relative max-w-sm w-full">
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="제품명, 카테고리 검색"
+                  className="w-full px-4 py-3 pr-10 bg-white border border-stone-300 text-sm focus:border-stone-900 transition-colors"
+                />
+                <svg className="absolute right-3 top-3.5 w-4 h-4 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="7" /><line x1="20" y1="20" x2="16.5" y2="16.5" />
+                </svg>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-stone-500 tracking-wider uppercase">
+                  {filtered.length}개의 제품
+                </span>
+                <select value={sort} onChange={(e) => setSort(e.target.value)}
+                  className="px-4 py-3 bg-white border border-stone-300 text-sm focus:border-stone-900 transition-colors">
+                  <option value="popular">인기순</option>
+                  <option value="latest">최신순</option>
+                  <option value="price-asc">낮은 가격순</option>
+                  <option value="price-desc">높은 가격순</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Grid or empty */}
+          {filtered.length === 0 ? (
+            <div className="py-24 text-center">
+              <p className="text-stone-500 text-sm mb-6">조건에 맞는 제품이 없습니다.</p>
+              <Button variant="secondary" size="sm" onClick={() => { setCategory('전체'); setSearch(''); }}>
+                필터 초기화
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-12">
+              {filtered.map((p) => <ProductCard key={p.id} product={p} />)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Page: Product Detail
+    // ========================================
+    function ProductDetailPage() {
+      const { id } = useParams();
+      const { addItem } = useCart();
+      const { push } = useToast();
+      const { navigate } = useRouter();
+      const product = useMemo(() => PRODUCTS.find((p) => p.id === id), [id]);
+      const [qty, setQty] = useState(1);
+
+      if (!product) {
+        return (
+          <div className="max-w-7xl mx-auto px-6 lg:px-10 py-24 text-center">
+            <h2 className="font-display text-3xl mb-4">제품을 찾을 수 없습니다</h2>
+            <Link to="/products"><Button variant="primary">제품 목록으로</Button></Link>
+          </div>
+        );
+      }
+
+      const related = PRODUCTS.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 4);
+
+      const handleAdd = () => {
+        addItem(product.id, qty);
+        push(`${product.name} × ${qty}개 — 장바구니에 담았습니다`);
+      };
+      const handleBuyNow = () => {
+        addItem(product.id, qty);
+        navigate('/cart');
+      };
+
+      return (
+        <div className="max-w-7xl mx-auto px-6 lg:px-10 py-12">
+          <div className="text-xs text-stone-500 mb-8 tracking-wider">
+            <Link to="/" className="hover:text-amber-600">홈</Link>
+            <span className="mx-2">/</span>
+            <Link to="/products" className="hover:text-amber-600">제품</Link>
+            <span className="mx-2">/</span>
+            <span>{product.name}</span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16">
+            <div className="bg-stone-100 aspect-square overflow-hidden">
+              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+            </div>
+
+            <div className="flex flex-col">
+              <div className="flex gap-1.5 mb-4">
+                {product.isNew && <Badge variant="gold">NEW</Badge>}
+                {product.isBest && <Badge variant="default">BEST</Badge>}
+                {product.originalPrice && <Badge variant="sale">SALE</Badge>}
+              </div>
+              <div className="text-xs tracking-[0.2em] uppercase text-stone-500 mb-2">{product.category}</div>
+              <h1 className="font-display text-4xl md:text-5xl mb-2">{product.name}</h1>
+              <div className="text-sm italic text-stone-500 mb-6">{product.subtitle}</div>
+
+              <div className="flex items-baseline gap-3 mb-8 pb-8 border-b border-stone-200">
+                <span className="text-3xl font-semibold">{formatKRW(product.price)}</span>
+                {product.originalPrice && (
+                  <span className="text-base text-stone-400 line-through">{formatKRW(product.originalPrice)}</span>
+                )}
+                {product.originalPrice && (
+                  <span className="text-sm text-red-600 font-semibold">
+                    {Math.round((1 - product.price / product.originalPrice) * 100)}% OFF
+                  </span>
+                )}
+              </div>
+
+              <p className="text-stone-700 leading-relaxed mb-8">{product.description}</p>
+
+              <div className="mb-8">
+                <h3 className="text-xs tracking-[0.2em] uppercase text-stone-500 mb-4">제품 사양</h3>
+                <dl className="grid grid-cols-[120px_1fr] gap-y-3 text-sm">
+                  {Object.entries(product.specs).map(([k, v]) => (
+                    <React.Fragment key={k}>
+                      <dt className="text-stone-500">{k}</dt>
+                      <dd className="text-stone-900">{v}</dd>
+                    </React.Fragment>
+                  ))}
+                </dl>
+              </div>
+
+              <div className="mb-8 pb-8 border-b border-stone-200">
+                <div className="text-xs tracking-[0.2em] uppercase text-stone-500 mb-3">수량</div>
+                <div className="inline-flex border border-stone-300">
+                  <button
+                    onClick={() => setQty((q) => Math.max(1, q - 1))}
+                    className="w-12 h-12 flex items-center justify-center text-stone-600 hover:bg-stone-100"
+                    aria-label="수량 감소"
+                  >−</button>
+                  <div className="w-14 h-12 flex items-center justify-center text-sm font-semibold border-x border-stone-300">{qty}</div>
+                  <button
+                    onClick={() => setQty((q) => Math.min(product.stock, q + 1))}
+                    className="w-12 h-12 flex items-center justify-center text-stone-600 hover:bg-stone-100"
+                    aria-label="수량 증가"
+                  >+</button>
+                </div>
+                <div className="text-xs text-stone-500 mt-2">재고 {product.stock}개</div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button variant="secondary" size="lg" className="flex-1" onClick={handleAdd}>장바구니 담기</Button>
+                <Button variant="primary" size="lg" className="flex-1" onClick={handleBuyNow}>바로 구매하기</Button>
+              </div>
+
+              <div className="mt-8 pt-8 border-t border-stone-200 grid grid-cols-3 gap-4 text-center text-xs text-stone-600">
+                <div>
+                  <div className="font-semibold text-stone-900 mb-1">무료배송</div>
+                  <div>10만원 이상</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-stone-900 mb-1">2년 품질보증</div>
+                  <div>무상 A/S</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-stone-900 mb-1">전문 상담</div>
+                  <div>1588-0000</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {related.length > 0 && (
+            <section className="mt-24 pt-16 border-t border-stone-200">
+              <h2 className="font-display text-3xl mb-10">관련 제품</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                {related.map((p) => <ProductCard key={p.id} product={p} />)}
+              </div>
+            </section>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Page: Cart
+    // ========================================
+    function CartPage() {
+      const { items, removeItem, updateQty, clear, count } = useCart();
+
+      const rows = useMemo(() =>
+        items.map((it) => {
+          const product = PRODUCTS.find((p) => p.id === it.id);
+          return product ? { ...it, product } : null;
+        }).filter(Boolean)
+      , [items]);
+
+      const subtotal = rows.reduce((acc, r) => acc + r.product.price * r.quantity, 0);
+      const shipping = subtotal >= 100000 || subtotal === 0 ? 0 : 3000;
+      const total = subtotal + shipping;
+
+      return (
+        <div className="max-w-7xl mx-auto px-6 lg:px-10 py-16">
+          <div className="mb-12 text-center">
+            <div className="text-xs tracking-[0.25em] uppercase text-amber-600 mb-3">Cart</div>
+            <h1 className="font-display text-4xl md:text-5xl">장바구니</h1>
+          </div>
+
+          {rows.length === 0 ? (
+            <div className="py-24 text-center">
+              <svg className="w-16 h-16 mx-auto text-stone-300 mb-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <path d="M16 10a4 4 0 01-8 0" />
+              </svg>
+              <p className="text-stone-500 mb-8">장바구니가 비어있습니다.</p>
+              <Link to="/products"><Button variant="primary" size="lg">제품 둘러보기</Button></Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+              <div className="lg:col-span-2">
+                <div className="hidden md:grid grid-cols-[1fr_100px_120px_40px] gap-4 px-2 pb-3 text-xs tracking-wider uppercase text-stone-500 border-b border-stone-200">
+                  <div>제품</div>
+                  <div className="text-center">수량</div>
+                  <div className="text-right">금액</div>
+                  <div></div>
+                </div>
+                <div className="divide-y divide-stone-200">
+                  {rows.map((r) => (
+                    <div key={r.id} className="py-5 grid grid-cols-[80px_1fr_auto] md:grid-cols-[1fr_100px_120px_40px] items-center gap-4">
+                      <div className="md:col-span-1 flex items-center gap-4">
+                        <Link to={`/product/${r.id}`} className="w-20 h-20 bg-stone-100 overflow-hidden flex-shrink-0">
+                          <img src={r.product.image} alt={r.product.name} className="w-full h-full object-cover" />
+                        </Link>
+                        <div className="hidden md:block">
+                          <div className="text-xs text-stone-500 mb-1">{r.product.category}</div>
+                          <Link to={`/product/${r.id}`} className="font-display text-lg hover:text-amber-600">{r.product.name}</Link>
+                          <div className="text-xs text-stone-500 italic">{r.product.subtitle}</div>
+                        </div>
+                      </div>
+                      <div className="md:hidden">
+                        <div className="text-xs text-stone-500 mb-1">{r.product.category}</div>
+                        <Link to={`/product/${r.id}`} className="font-display text-base">{r.product.name}</Link>
+                        <div className="text-sm font-semibold mt-2">{formatKRW(r.product.price * r.quantity)}</div>
+                      </div>
+                      <div className="hidden md:flex justify-center">
+                        <div className="inline-flex border border-stone-300">
+                          <button onClick={() => updateQty(r.id, r.quantity - 1)} className="w-9 h-9 text-stone-600 hover:bg-stone-100">−</button>
+                          <div className="w-10 h-9 flex items-center justify-center text-sm font-medium border-x border-stone-300">{r.quantity}</div>
+                          <button onClick={() => updateQty(r.id, r.quantity + 1)} className="w-9 h-9 text-stone-600 hover:bg-stone-100">+</button>
+                        </div>
+                      </div>
+                      <div className="hidden md:block text-right text-sm font-semibold">{formatKRW(r.product.price * r.quantity)}</div>
+                      <button onClick={() => removeItem(r.id)} className="text-stone-400 hover:text-red-600 justify-self-end" aria-label="제거">
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-6">
+                  <button onClick={clear} className="text-xs tracking-wider uppercase text-stone-500 hover:text-red-600">전체 비우기</button>
+                </div>
+              </div>
+
+              <aside className="lg:col-span-1">
+                <div className="bg-stone-100 p-8 sticky top-28">
+                  <h3 className="font-display text-2xl mb-6">주문 요약</h3>
+                  <dl className="space-y-3 text-sm mb-6">
+                    <div className="flex justify-between">
+                      <dt className="text-stone-600">상품 ({count}개)</dt>
+                      <dd className="font-medium">{formatKRW(subtotal)}</dd>
+                    </div>
+                    <div className="flex justify-between">
+                      <dt className="text-stone-600">배송비</dt>
+                      <dd className="font-medium">{shipping === 0 ? '무료' : formatKRW(shipping)}</dd>
+                    </div>
+                    {subtotal > 0 && subtotal < 100000 && (
+                      <div className="text-xs text-amber-700 pt-1">
+                        {formatKRW(100000 - subtotal)} 더 담으면 무료배송!
+                      </div>
+                    )}
+                  </dl>
+                  <div className="flex justify-between pt-4 mb-6 border-t border-stone-300">
+                    <span className="text-sm tracking-wider uppercase font-semibold">총 결제금액</span>
+                    <span className="font-display text-2xl">{formatKRW(total)}</span>
+                  </div>
+                  <Button variant="primary" size="lg" className="w-full">결제하기</Button>
+                  <Link to="/products" className="block text-center text-xs tracking-wider uppercase text-stone-500 hover:text-stone-900 mt-4">
+                    쇼핑 계속하기 →
+                  </Link>
+                </div>
+              </aside>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Page: About
+    // ========================================
+    function AboutPage() {
+      return (
+        <div>
+          <section className="relative h-[60vh] min-h-[420px] overflow-hidden">
+            <img src="./images/chandelier-01.jpg" alt="LUMIÈRE" className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-stone-900/60" />
+            <div className="relative z-10 h-full flex flex-col items-center justify-center text-white text-center px-6">
+              <div className="text-xs tracking-[0.35em] uppercase text-amber-300 mb-4">Our Story</div>
+              <h1 className="font-display text-5xl md:text-7xl">Brand Story</h1>
+            </div>
+          </section>
+
+          <section className="max-w-3xl mx-auto px-6 py-24 text-center">
+            <h2 className="font-display text-3xl md:text-5xl leading-tight mb-10">
+              "빛은 가구가 아니라<br/>공간의 감정입니다."
+            </h2>
+            <p className="text-stone-700 leading-[1.9] text-base md:text-lg">
+              LUMIÈRE는 2018년, '좋은 조명은 방의 온도를 바꾼다'는
+              단순한 믿음에서 시작되었습니다. 서울의 작은 스튜디오에서 시작된 작업은
+              이제 유럽과 일본의 장인들과 함께, 오래 써도 질리지 않는 조명을
+              한 점 한 점 완성하는 일이 되었습니다.
+            </p>
+          </section>
+
+          <section className="bg-stone-100 py-24">
+            <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-12 text-center">
+              {[
+                { n: '01', t: '장인의 손으로', d: '모든 조명은 검증된 장인의 작업장에서 수작업으로 완성됩니다. 기계가 흉내낼 수 없는 질감과 무게감을 그대로 전합니다.' },
+                { n: '02', t: '오래가는 디자인', d: '유행을 좇지 않습니다. 10년이 지나도 공간에 어울리는 조형을 고르고, 수리와 부품 공급을 긴 시간 책임집니다.' },
+                { n: '03', t: '따뜻한 빛의 과학', d: '색온도, 연색성, 디밍 곡선까지 ─ 인간의 눈이 가장 편안한 빛을 위해 광학 설계를 직접 검증합니다.' },
+              ].map((v) => (
+                <div key={v.n}>
+                  <div className="font-display text-5xl text-amber-600 mb-4">{v.n}</div>
+                  <h3 className="font-display text-2xl mb-4">{v.t}</h3>
+                  <p className="text-stone-600 leading-relaxed text-sm">{v.d}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="max-w-5xl mx-auto px-6 py-24">
+            <div className="grid md:grid-cols-2 gap-12 items-center">
+              <img src="./images/floor-01.jpg" alt="Studio" className="w-full aspect-[4/5] object-cover" />
+              <div>
+                <div className="text-xs tracking-[0.25em] uppercase text-amber-600 mb-4">Craftsmanship</div>
+                <h2 className="font-display text-4xl mb-6">한 점, 한 점.</h2>
+                <p className="text-stone-700 leading-relaxed mb-4">
+                  우리는 대량생산을 지양합니다. 한 달에 만들어지는 펜던트는
+                  많아야 120점. 놋쇠 마감, 유리 블로잉, 코드의 꼬임까지 사람의 손끝을 거칩니다.
+                </p>
+                <p className="text-stone-700 leading-relaxed mb-8">
+                  그래서 모든 제품에는 완성일자와 장인의 이니셜이 새겨집니다.
+                  당신의 거실에 놓인 그 조명은, 세상에 하나뿐입니다.
+                </p>
+                <Link to="/products">
+                  <Button variant="primary" size="lg">컬렉션 둘러보기</Button>
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          <section className="bg-stone-900 text-stone-100 py-20 text-center">
+            <div className="max-w-xl mx-auto px-6">
+              <h3 className="font-display text-3xl mb-4">뉴스레터 구독</h3>
+              <p className="text-stone-400 text-sm mb-8">신제품 소식과 인테리어 영감을 매달 보내드립니다.</p>
+              <form onSubmit={(e) => e.preventDefault()} className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="email"
+                  required
+                  placeholder="이메일 주소"
+                  className="flex-1 px-4 py-3 bg-transparent border border-stone-700 text-white placeholder:text-stone-500 focus:border-amber-500"
+                />
+                <Button variant="gold" size="md" type="submit">구독하기</Button>
+              </form>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      return (
+        <Router>
+          <CartProvider>
+            <ToastProvider>
+              <div className="min-h-screen flex flex-col">
+                <Header />
+                <main className="flex-1">
+                  <Routes>
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/products" element={<ProductsPage />} />
+                    <Route path="/product/:id" element={<ProductDetailPage />} />
+                    <Route path="/cart" element={<CartPage />} />
+                    <Route path="/about" element={<AboutPage />} />
+                    <Route path="*" element={
+                      <div className="max-w-xl mx-auto px-6 py-32 text-center">
+                        <h2 className="font-display text-4xl mb-4">페이지를 찾을 수 없습니다</h2>
+                        <p className="text-stone-500 mb-8">요청하신 페이지가 존재하지 않습니다.</p>
+                        <Link to="/"><Button variant="primary">홈으로</Button></Link>
+                      </div>
+                    } />
+                  </Routes>
+                </main>
+                <Footer />
+              </div>
+            </ToastProvider>
+          </CartProvider>
+        </Router>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

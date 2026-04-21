@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo Admin Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tailwind dark mode: class 기반
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    /* Base smoothing & scrollbar tuning (shadcn 스타일 디테일) */
+    html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    body { font-feature-settings: "rlig" 1, "calt" 1; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 9999px; }
+    .dark ::-webkit-scrollbar-thumb { background: #3f3f46; }
+
+    /* Dialog fade-in */
+    @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes contentIn {
+      from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+      to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+    .overlay-in { animation: overlayIn 160ms ease-out; }
+    .content-in { animation: contentIn 180ms ease-out; }
+
+    /* Toast slide in */
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .toast-in { animation: toastIn 160ms ease-out; }
+
+    /* Skeleton shimmer */
+    @keyframes shimmer {
+      0% { background-position: -400px 0; }
+      100% { background-position: 400px 0; }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.12) 40px, rgba(0,0,0,0.06) 80px);
+      background-size: 600px 100%;
+      animation: shimmer 1.4s infinite linear;
+    }
+    .dark .skeleton {
+      background: linear-gradient(90deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.10) 40px, rgba(255,255,255,0.05) 80px);
+      background-size: 600px 100%;
+    }
+  </style>
+</head>
+<body class="bg-white text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50 font-sans">
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="env,react">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } = React;
+
+    // ========================================
+    // Utils
+    // ========================================
+    const cx = (...classes) => classes.filter(Boolean).join(' ');
+
+    // ========================================
+    // API Config & Helper
+    // ========================================
+    const API_BASE_URL = '/api';
+
+    async function api(path, { method='GET', body } = {}) {
+      const token = localStorage.getItem('admin_token');
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      // 401 처리: 토큰 제거 + 전역 이벤트
+      if (res.status === 401) {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_user');
+        window.dispatchEvent(new CustomEvent('admin-unauthorized'));
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '인증이 만료되었습니다. 다시 로그인해 주세요.');
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `${res.status} 오류`);
+      return data;
+    }
+
+    // ========================================
+    // Icons (Lucide-style inline SVG)
+    // ========================================
+    const iconBase = {
+      xmlns: 'http://www.w3.org/2000/svg',
+      width: 16,
+      height: 16,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: 2,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      'aria-hidden': true,
+    };
+
+    const Icon = ({ children, size = 16, className = '', ...rest }) => (
+      <svg {...iconBase} width={size} height={size} className={className} {...rest}>
+        {children}
+      </svg>
+    );
+
+    const IconCheck      = (p) => <Icon {...p}><polyline points="20 6 9 17 4 12"/></Icon>;
+    const IconPlus       = (p) => <Icon {...p}><path d="M12 5v14"/><path d="M5 12h14"/></Icon>;
+    const IconSearch     = (p) => <Icon {...p}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></Icon>;
+    const IconTrash      = (p) => <Icon {...p}><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></Icon>;
+    const IconEdit       = (p) => <Icon {...p}><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></Icon>;
+    const IconX          = (p) => <Icon {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Icon>;
+    const IconSun        = (p) => <Icon {...p}><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></Icon>;
+    const IconMoon       = (p) => <Icon {...p}><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></Icon>;
+    const IconChevronDown= (p) => <Icon {...p}><path d="m6 9 6 6 6-6"/></Icon>;
+    const IconLayout     = (p) => <Icon {...p}><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></Icon>;
+    const IconListTodo   = (p) => <Icon {...p}><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></Icon>;
+    const IconUsers      = (p) => <Icon {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>;
+    const IconCircleCheck= (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></Icon>;
+    const IconClock      = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>;
+    const IconAlert      = (p) => <Icon {...p}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></Icon>;
+    const IconLogout     = (p) => <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></Icon>;
+    const IconLock       = (p) => <Icon {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Icon>;
+
+    // ========================================
+    // Design System: Button (shadcn-style)
+    // ========================================
+    const buttonVariants = {
+      variant: {
+        default:   'bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-50/90',
+        secondary: 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700',
+        outline:   'border border-zinc-200 bg-white hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-800 dark:hover:text-zinc-50',
+        ghost:     'hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-50',
+        destructive:'bg-red-600 text-white hover:bg-red-600/90 dark:bg-red-700 dark:hover:bg-red-700/90',
+      },
+      size: {
+        sm:   'h-8 px-3 text-xs',
+        md:   'h-9 px-4 text-sm',
+        lg:   'h-10 px-6 text-sm',
+        icon: 'h-9 w-9',
+      },
+    };
+
+    const Button = React.forwardRef(({ variant='default', size='md', className='', children, ...props }, ref) => (
+      <button
+        ref={ref}
+        className={cx(
+          'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium tracking-tight',
+          'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 dark:focus-visible:ring-zinc-300 dark:focus-visible:ring-offset-zinc-950',
+          'disabled:pointer-events-none disabled:opacity-50',
+          buttonVariants.variant[variant],
+          buttonVariants.size[size],
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </button>
+    ));
+
+    // ========================================
+    // Design System: Input
+    // ========================================
+    const Input = React.forwardRef(({ className='', ...props }, ref) => (
+      <input
+        ref={ref}
+        className={cx(
+          'flex h-9 w-full rounded-md border border-zinc-200 bg-transparent px-3 py-1 text-sm shadow-sm',
+          'placeholder:text-zinc-500 dark:placeholder:text-zinc-400',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 dark:focus-visible:ring-zinc-300 dark:focus-visible:ring-offset-zinc-950',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          'dark:border-zinc-800 dark:bg-zinc-950',
+          className
+        )}
+        {...props}
+      />
+    ));
+
+    // ========================================
+    // Design System: Textarea
+    // ========================================
+    const Textarea = React.forwardRef(({ className='', ...props }, ref) => (
+      <textarea
+        ref={ref}
+        className={cx(
+          'flex min-h-[80px] w-full rounded-md border border-zinc-200 bg-transparent px-3 py-2 text-sm shadow-sm',
+          'placeholder:text-zinc-500 dark:placeholder:text-zinc-400',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 dark:focus-visible:ring-zinc-300 dark:focus-visible:ring-offset-zinc-950',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          'dark:border-zinc-800 dark:bg-zinc-950',
+          className
+        )}
+        {...props}
+      />
+    ));
+
+    // ========================================
+    // Design System: Label
+    // ========================================
+    const Label = ({ className='', children, htmlFor }) => (
+      <label htmlFor={htmlFor} className={cx('text-sm font-medium leading-none tracking-tight', className)}>
+        {children}
+      </label>
+    );
+
+    // ========================================
+    // Design System: Select (native, styled)
+    // ========================================
+    const Select = React.forwardRef(({ className='', children, ...props }, ref) => (
+      <div className="relative">
+        <select
+          ref={ref}
+          className={cx(
+            'flex h-9 w-full appearance-none items-center rounded-md border border-zinc-200 bg-transparent px-3 pr-8 py-1 text-sm shadow-sm',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 dark:focus-visible:ring-zinc-300 dark:focus-visible:ring-offset-zinc-950',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            'dark:border-zinc-800 dark:bg-zinc-950',
+            className
+          )}
+          {...props}
+        >
+          {children}
+        </select>
+        <IconChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 dark:text-zinc-400" />
+      </div>
+    ));
+
+    // ========================================
+    // Design System: Checkbox
+    // ========================================
+    const Checkbox = ({ checked, onCheckedChange, className='', 'aria-label': ariaLabel, indeterminate=false }) => {
+      const ref = useRef(null);
+      useEffect(() => { if (ref.current) ref.current.indeterminate = indeterminate; }, [indeterminate]);
+      return (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={indeterminate ? 'mixed' : checked}
+          aria-label={ariaLabel}
+          onClick={() => onCheckedChange && onCheckedChange(!checked)}
+          className={cx(
+            'peer inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border shadow-sm transition-colors',
+            'border-zinc-300 dark:border-zinc-700',
+            (checked || indeterminate)
+              ? 'bg-zinc-900 text-zinc-50 border-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 dark:border-zinc-50'
+              : 'bg-white dark:bg-zinc-950',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 dark:focus-visible:ring-zinc-300 dark:focus-visible:ring-offset-zinc-950',
+            className
+          )}
+        >
+          {indeterminate
+            ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            : checked ? <IconCheck size={12} /> : null}
+        </button>
+      );
+    };
+
+    // ========================================
+    // Design System: Badge
+    // ========================================
+    const badgeVariants = {
+      default:    'bg-zinc-900 text-zinc-50 dark:bg-zinc-50 dark:text-zinc-900 border-transparent',
+      secondary:  'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50 border-transparent',
+      outline:    'text-zinc-950 dark:text-zinc-50 border-zinc-200 dark:border-zinc-800',
+      destructive:'bg-red-600 text-white dark:bg-red-700 border-transparent',
+      // Priority
+      low:        'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900',
+      medium:     'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900',
+      high:       'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900',
+      urgent:     'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900',
+      // Status
+      pending:     'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
+      in_progress: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900',
+      done:        'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900',
+      // Roles
+      super_admin: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-900',
+      admin:       'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-900',
+      user:        'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
+    };
+
+    const Badge = ({ variant='default', className='', children }) => (
+      <span className={cx(
+        'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium tracking-tight',
+        badgeVariants[variant] || badgeVariants.default,
+        className
+      )}>
+        {children}
+      </span>
+    );
+
+    // ========================================
+    // Design System: Card
+    // ========================================
+    const Card = ({ className='', children, ...props }) => (
+      <div
+        className={cx(
+          'rounded-lg border border-zinc-200 bg-white text-zinc-950 shadow-sm',
+          'dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50',
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </div>
+    );
+    const CardHeader      = ({ className='', children }) => <div className={cx('flex flex-col space-y-1.5 p-6', className)}>{children}</div>;
+    const CardTitle       = ({ className='', children }) => <h3 className={cx('text-sm font-semibold leading-none tracking-tight', className)}>{children}</h3>;
+    const CardDescription = ({ className='', children }) => <p className={cx('text-sm text-zinc-500 dark:text-zinc-400', className)}>{children}</p>;
+    const CardContent     = ({ className='', children }) => <div className={cx('p-6 pt-0', className)}>{children}</div>;
+    const CardFooter      = ({ className='', children }) => <div className={cx('flex items-center p-6 pt-0', className)}>{children}</div>;
+
+    // ========================================
+    // Design System: Separator
+    // ========================================
+    const Separator = ({ orientation='horizontal', className='' }) => (
+      <div
+        role="separator"
+        className={cx(
+          'shrink-0 bg-zinc-200 dark:bg-zinc-800',
+          orientation === 'horizontal' ? 'h-px w-full' : 'h-full w-px',
+          className
+        )}
+      />
+    );
+
+    // ========================================
+    // Design System: Avatar
+    // ========================================
+    const Avatar = ({ name, className='' }) => {
+      const initials = (name || '?').split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
+      // 이름 기반 hash 색상
+      const colors = ['bg-rose-100 text-rose-700','bg-amber-100 text-amber-700','bg-emerald-100 text-emerald-700','bg-sky-100 text-sky-700','bg-violet-100 text-violet-700','bg-fuchsia-100 text-fuchsia-700'];
+      let h=0; for (const c of (name||'')) h = (h*31 + c.charCodeAt(0)) % colors.length;
+      return (
+        <span className={cx(
+          'inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium tracking-tight',
+          colors[h],
+          'dark:bg-zinc-800 dark:text-zinc-200',
+          className
+        )}>{initials}</span>
+      );
+    };
+
+    // ========================================
+    // Design System: Skeleton
+    // ========================================
+    const Skeleton = ({ className='' }) => (
+      <div className={cx('skeleton rounded-md', className)} />
+    );
+
+    // ========================================
+    // Design System: Dialog (controlled)
+    // ========================================
+    const Dialog = ({ open, onOpenChange, children }) => {
+      useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape' && open) onOpenChange(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [open, onOpenChange]);
+
+      useEffect(() => {
+        if (open) document.body.style.overflow = 'hidden';
+        else document.body.style.overflow = '';
+        return () => { document.body.style.overflow = ''; };
+      }, [open]);
+
+      if (!open) return null;
+      return (
+        <div className="fixed inset-0 z-50">
+          <div
+            className="fixed inset-0 bg-black/50 overlay-in"
+            onClick={() => onOpenChange(false)}
+            aria-hidden="true"
+          />
+          <div role="dialog" aria-modal="true"
+            className="fixed left-[50%] top-[50%] z-50 grid w-[95vw] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-zinc-200 bg-white p-6 shadow-lg sm:rounded-lg dark:border-zinc-800 dark:bg-zinc-950 content-in">
+            {children}
+          </div>
+        </div>
+      );
+    };
+    const DialogHeader      = ({ children, className='' }) => <div className={cx('flex flex-col space-y-1.5 text-center sm:text-left', className)}>{children}</div>;
+    const DialogTitle       = ({ children, className='' }) => <h2 className={cx('text-lg font-semibold leading-none tracking-tight', className)}>{children}</h2>;
+    const DialogDescription = ({ children, className='' }) => <p className={cx('text-sm text-zinc-500 dark:text-zinc-400', className)}>{children}</p>;
+    const DialogFooter      = ({ children, className='' }) => <div className={cx('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)}>{children}</div>;
+    const DialogClose       = ({ onClick }) => (
+      <button onClick={onClick} aria-label="닫기"
+        className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-white transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-zinc-950 focus:ring-offset-2 disabled:pointer-events-none dark:ring-offset-zinc-950 dark:focus:ring-zinc-300">
+        <IconX />
+      </button>
+    );
+
+    // ========================================
+    // Design System: Tabs (controlled)
+    // ========================================
+    const TabsContext = createContext(null);
+    const Tabs = ({ value, onValueChange, children, className='' }) => (
+      <TabsContext.Provider value={{ value, onValueChange }}>
+        <div className={className}>{children}</div>
+      </TabsContext.Provider>
+    );
+    const TabsList = ({ children, className='' }) => (
+      <div role="tablist" className={cx(
+        'inline-flex h-9 items-center justify-center rounded-lg bg-zinc-100 p-1 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+        className
+      )}>{children}</div>
+    );
+    const TabsTrigger = ({ value, children, className='' }) => {
+      const ctx = useContext(TabsContext);
+      const active = ctx.value === value;
+      return (
+        <button
+          role="tab"
+          aria-selected={active}
+          onClick={() => ctx.onValueChange(value)}
+          className={cx(
+            'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-white transition-all',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 dark:ring-offset-zinc-950 dark:focus-visible:ring-zinc-300',
+            active
+              ? 'bg-white text-zinc-950 shadow dark:bg-zinc-950 dark:text-zinc-50'
+              : 'hover:text-zinc-900 dark:hover:text-zinc-50',
+            className
+          )}
+        >
+          {children}
+        </button>
+      );
+    };
+    const TabsContent = ({ value, children, className='' }) => {
+      const ctx = useContext(TabsContext);
+      if (ctx.value !== value) return null;
+      return <div role="tabpanel" className={cx('mt-4', className)}>{children}</div>;
+    };
+
+    // ========================================
+    // Design System: Table primitives
+    // ========================================
+    const Table       = ({ children, className='' }) => (
+      <div className="relative w-full overflow-auto">
+        <table className={cx('w-full caption-bottom text-sm', className)}>{children}</table>
+      </div>
+    );
+    const TableHeader = ({ children }) => <thead className="[&_tr]:border-b border-zinc-200 dark:border-zinc-800">{children}</thead>;
+    const TableBody   = ({ children }) => <tbody className="[&_tr:last-child]:border-0">{children}</tbody>;
+    const TableRow    = ({ children, className='', ...p }) => (
+      <tr className={cx(
+        'border-b border-zinc-200 transition-colors hover:bg-zinc-50 data-[state=selected]:bg-zinc-100',
+        'dark:border-zinc-800 dark:hover:bg-zinc-900 dark:data-[state=selected]:bg-zinc-800',
+        className
+      )} {...p}>{children}</tr>
+    );
+    const TableHead   = ({ children, className='' }) => (
+      <th className={cx('h-10 px-4 text-left align-middle text-xs font-medium tracking-tight text-zinc-500 dark:text-zinc-400', className)}>{children}</th>
+    );
+    const TableCell   = ({ children, className='' }) => (
+      <td className={cx('p-4 align-middle', className)}>{children}</td>
+    );
+
+    // ========================================
+    // 🌓 Theme Context (dark mode)
+    // ========================================
+    const ThemeContext = createContext(null);
+    const ThemeProvider = ({ children }) => {
+      const [theme, setTheme] = useState(() => {
+        if (typeof window === 'undefined') return 'light';
+        const stored = localStorage.getItem('todo-admin-theme');
+        if (stored) return stored;
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      });
+      useEffect(() => {
+        const root = document.documentElement;
+        if (theme === 'dark') root.classList.add('dark');
+        else root.classList.remove('dark');
+        localStorage.setItem('todo-admin-theme', theme);
+      }, [theme]);
+      const toggle = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+      return (
+        <ThemeContext.Provider value={{ theme, toggle }}>{children}</ThemeContext.Provider>
+      );
+    };
+    const useTheme = () => useContext(ThemeContext);
+
+    // ========================================
+    // 🔔 Toast Context
+    // ========================================
+    const ToastContext = createContext(null);
+    const ToastProvider = ({ children }) => {
+      const [toasts, setToasts] = useState([]);
+      const push = useCallback((msg, type='error') => {
+        const id = Math.random().toString(36).slice(2);
+        setToasts(prev => [...prev, { id, msg, type }]);
+        setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== id));
+        }, 3000);
+      }, []);
+      const value = useMemo(() => ({
+        error:   (m) => push(m, 'error'),
+        success: (m) => push(m, 'success'),
+        info:    (m) => push(m, 'info'),
+      }), [push]);
+      return (
+        <ToastContext.Provider value={value}>
+          {children}
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-[90vw] max-w-sm pointer-events-none">
+            {toasts.map(t => (
+              <div key={t.id}
+                className={cx(
+                  'toast-in rounded-md border px-4 py-3 text-sm shadow-md pointer-events-auto',
+                  t.type === 'error'   && 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/60 dark:border-red-900 dark:text-red-200',
+                  t.type === 'success' && 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/60 dark:border-emerald-900 dark:text-emerald-200',
+                  t.type === 'info'    && 'bg-zinc-50 border-zinc-200 text-zinc-800 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-200',
+                )}
+                role="alert"
+              >
+                {t.msg}
+              </div>
+            ))}
+          </div>
+        </ToastContext.Provider>
+      );
+    };
+    const useToast = () => useContext(ToastContext);
+
+    // ========================================
+    // 🔐 Auth Hook
+    // ========================================
+    const useAuth = () => {
+      const [token, setToken] = useState(() => localStorage.getItem('admin_token'));
+      const [user, setUser]   = useState(() => {
+        try { return JSON.parse(localStorage.getItem('admin_user') || 'null'); } catch { return null; }
+      });
+
+      const login = useCallback((newToken, newUser) => {
+        localStorage.setItem('admin_token', newToken);
+        localStorage.setItem('admin_user', JSON.stringify(newUser));
+        setToken(newToken);
+        setUser(newUser);
+      }, []);
+
+      const logout = useCallback(() => {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_user');
+        setToken(null);
+        setUser(null);
+      }, []);
+
+      // 401 전역 이벤트 수신 → 로그아웃 반영
+      useEffect(() => {
+        const onUnauth = () => {
+          setToken(null);
+          setUser(null);
+        };
+        window.addEventListener('admin-unauthorized', onUnauth);
+        return () => window.removeEventListener('admin-unauthorized', onUnauth);
+      }, []);
+
+      return {
+        token,
+        user,
+        isAuthed: Boolean(token && user),
+        login,
+        logout,
+      };
+    };
+
+    // ========================================
+    // 🔖 Priority / Status / Role labels
+    // ========================================
+    const PRIORITY = [
+      { value: 'low',    label: 'Low'    },
+      { value: 'medium', label: 'Medium' },
+      { value: 'high',   label: 'High'   },
+      { value: 'urgent', label: 'Urgent' },
+    ];
+    const STATUS = [
+      { value: 'pending',     label: 'Pending'      },
+      { value: 'in_progress', label: 'In Progress'  },
+      { value: 'done',        label: 'Done'         },
+    ];
+    const ROLES = [
+      { value: 'user',        label: 'User'        },
+      { value: 'admin',       label: 'Admin'       },
+      { value: 'super_admin', label: 'Super Admin' },
+    ];
+
+    const priorityLabel = (v) => (PRIORITY.find(p => p.value === v) || {}).label || v;
+    const statusLabel   = (v) => (STATUS.find(s => s.value === v) || {}).label || v;
+    const roleLabel     = (v) => (ROLES.find(r => r.value === v) || {}).label || v;
+
+    const isAdminRole = (role) => role === 'admin' || role === 'super_admin';
+    const isSuperAdmin = (role) => role === 'super_admin';
+
+    // ========================================
+    // 🔐 Login Screen
+    // ========================================
+    const LoginScreen = ({ onLogin }) => {
+      const { theme, toggle } = useTheme();
+      const toast = useToast();
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [submitting, setSubmitting] = useState(false);
+      const [error, setError] = useState('');
+
+      const submit = async (e) => {
+        e.preventDefault();
+        setError('');
+        if (!email.trim() || !password) {
+          setError('이메일과 비밀번호를 입력해 주세요.');
+          return;
+        }
+        setSubmitting(true);
+        try {
+          const data = await api('/login', {
+            method: 'POST',
+            body: { email: email.trim(), password },
+          });
+          if (!data || !data.token || !data.user) {
+            throw new Error('서버 응답이 올바르지 않습니다.');
+          }
+          if (!isAdminRole(data.user.role)) {
+            setError('관리자 권한이 없습니다.');
+            localStorage.removeItem('admin_token');
+            localStorage.removeItem('admin_user');
+            setSubmitting(false);
+            return;
+          }
+          onLogin(data.token, data.user);
+          toast.success(`환영합니다, ${data.user.name || data.user.email}님`);
+        } catch (err) {
+          setError(err.message || '로그인에 실패했습니다.');
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-white text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
+          {/* Top bar (theme toggle) */}
+          <div className="absolute top-4 right-4">
+            <Button variant="outline" size="icon" onClick={toggle}
+              aria-label={theme==='dark'?'라이트 모드로 전환':'다크 모드로 전환'}>
+              {theme === 'dark' ? <IconSun/> : <IconMoon/>}
+            </Button>
+          </div>
+
+          <div className="min-h-screen flex items-center justify-center px-4 py-10">
+            <div className="w-full max-w-md">
+              <div className="mb-6 flex items-center justify-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-900 text-zinc-50 dark:bg-zinc-50 dark:text-zinc-900">
+                  <IconCircleCheck size={18}/>
+                </div>
+                <span className="text-lg font-semibold tracking-tight">Todo Admin</span>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">관리자 로그인</CardTitle>
+                  <CardDescription>관리자 계정으로 로그인해 주세요.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={submit} className="grid gap-4" noValidate>
+                    <div className="grid gap-2">
+                      <Label htmlFor="login-email">이메일</Label>
+                      <Input
+                        id="login-email"
+                        type="email"
+                        autoComplete="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="admin@example.com"
+                        disabled={submitting}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="login-password">비밀번호</Label>
+                      <Input
+                        id="login-password"
+                        type="password"
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        disabled={submitting}
+                      />
+                    </div>
+
+                    {error && (
+                      <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300">
+                        {error}
+                      </div>
+                    )}
+
+                    <Button type="submit" disabled={submitting}>
+                      <IconLock/>
+                      {submitting ? '로그인 중...' : '로그인'}
+                    </Button>
+
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 text-center leading-relaxed">
+                      시드 계정 힌트<br/>
+                      <code className="font-mono">rada12@naver.com</code> / <code className="font-mono">Skstoa77!@#$</code> (super_admin)
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <p className="mt-4 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                shadcn-inspired UI · React + Tailwind
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ========================================
+    // 🧩 Header (with user info + logout)
+    // ========================================
+    const Header = ({ onNewTodo, user, onLogout }) => {
+      const { theme, toggle } = useTheme();
+      return (
+        <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
+          <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-zinc-50 dark:bg-zinc-50 dark:text-zinc-900">
+                <IconCircleCheck size={16}/>
+              </div>
+              <span className="font-semibold tracking-tight">Todo Admin</span>
+              <Badge variant="outline" className="ml-2 hidden sm:inline-flex">v1.0</Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={toggle}
+                aria-label={theme==='dark'?'라이트 모드로 전환':'다크 모드로 전환'}>
+                {theme === 'dark' ? <IconSun/> : <IconMoon/>}
+              </Button>
+              <Button onClick={onNewTodo} size="md" className="hidden sm:inline-flex">
+                <IconPlus/> 새 할일
+              </Button>
+              <Button onClick={onNewTodo} size="icon" className="sm:hidden" aria-label="새 할일">
+                <IconPlus/>
+              </Button>
+
+              {/* user info */}
+              <div className="hidden md:flex items-center gap-2 pl-2 border-l border-zinc-200 dark:border-zinc-800 ml-1">
+                <Avatar name={user?.name || user?.email}/>
+                <div className="flex flex-col leading-tight min-w-0 max-w-[160px]">
+                  <span className="text-sm font-medium tracking-tight truncate">{user?.name || '사용자'}</span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{user?.email}</span>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={onLogout} aria-label="로그아웃" className="hidden sm:inline-flex">
+                <IconLogout/> 로그아웃
+              </Button>
+              <Button variant="outline" size="icon" onClick={onLogout} aria-label="로그아웃" className="sm:hidden">
+                <IconLogout/>
+              </Button>
+            </div>
+          </div>
+        </header>
+      );
+    };
+
+    // ========================================
+    // 📊 Dashboard (Stats + Upcoming)
+    // ========================================
+    const StatCard = ({ title, value, hint, icon, tone='default', loading=false }) => {
+      const toneMap = {
+        default: 'text-zinc-900 dark:text-zinc-50',
+        success: 'text-emerald-600 dark:text-emerald-400',
+        info:    'text-blue-600 dark:text-blue-400',
+        warn:    'text-amber-600 dark:text-amber-400',
+      };
+      return (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{title}</CardTitle>
+            <div className={cx('text-zinc-400 dark:text-zinc-500', toneMap[tone])}>{icon}</div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-8 w-20"/>
+            ) : (
+              <div className={cx('text-2xl font-semibold tracking-tight', toneMap[tone])}>{value}</div>
+            )}
+            {hint && <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">{hint}</p>}
+          </CardContent>
+        </Card>
+      );
+    };
+
+    const Dashboard = ({ stats, loading, onJumpTodos }) => {
+      const total   = stats?.total ?? 0;
+      const done    = stats?.completed ?? 0;
+      const inProg  = stats?.inProgress ?? 0;
+      const urgent  = stats?.urgent ?? 0;
+      const userCount = stats?.userCount ?? 0;
+      const upcoming = stats?.upcomingDeadlines || [];
+
+      const doneRate = total === 0 ? 0 : Math.round(done / total * 100);
+
+      return (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard title="전체 할일"        value={total}   hint="등록된 모든 할일"       icon={<IconListTodo/>}    loading={loading}/>
+            <StatCard title="완료"            value={done}    hint={`${doneRate}% 완료율`}  icon={<IconCircleCheck/>} tone="success" loading={loading}/>
+            <StatCard title="진행 중"         value={inProg}  hint="지금 작업 중"          icon={<IconClock/>}        tone="info"    loading={loading}/>
+            <StatCard title="긴급(Urgent)"    value={urgent}  hint="즉시 확인 필요"         icon={<IconAlert/>}        tone="warn"    loading={loading}/>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>마감이 임박한 할일</CardTitle>
+                  <CardDescription>마감일 순으로 상위 항목</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={onJumpTodos}>전체 보기</Button>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="space-y-3">
+                    {[1,2,3].map(i => (
+                      <div key={i} className="flex items-center justify-between gap-3 py-2">
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-2/3"/>
+                          <Skeleton className="h-3 w-1/3"/>
+                        </div>
+                        <Skeleton className="h-5 w-16"/>
+                      </div>
+                    ))}
+                  </div>
+                ) : upcoming.length === 0 ? (
+                  <EmptyState title="마감 임박 할일이 없습니다" description="여유가 있네요!"/>
+                ) : (
+                  <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                    {upcoming.map(t => (
+                      <li key={t.id} className="flex items-center justify-between py-3 gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-medium tracking-tight">{t.title}</p>
+                            <Badge variant={t.priority}>{priorityLabel(t.priority)}</Badge>
+                          </div>
+                          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                            {t.user_name || t.user_email || '미지정'} · 마감 {t.due_date || '미정'}
+                          </p>
+                        </div>
+                        <Badge variant={t.status}>{statusLabel(t.status)}</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>시스템 요약</CardTitle>
+                <CardDescription>플랫폼 전체 현황</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-5 w-full"/>
+                    <Skeleton className="h-5 w-full"/>
+                    <Skeleton className="h-5 w-full"/>
+                  </div>
+                ) : (
+                  <ul className="space-y-3">
+                    <li className="flex items-center justify-between">
+                      <span className="text-sm text-zinc-600 dark:text-zinc-300">등록 사용자</span>
+                      <Badge variant="secondary">{userCount}명</Badge>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span className="text-sm text-zinc-600 dark:text-zinc-300">대기(Pending)</span>
+                      <Badge variant="pending">{stats?.pending ?? 0}건</Badge>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span className="text-sm text-zinc-600 dark:text-zinc-300">진행 중</span>
+                      <Badge variant="in_progress">{inProg}건</Badge>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span className="text-sm text-zinc-600 dark:text-zinc-300">완료</span>
+                      <Badge variant="done">{done}건</Badge>
+                    </li>
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      );
+    };
+
+    // ========================================
+    // 🧾 Empty State
+    // ========================================
+    const EmptyState = ({ title='데이터가 없습니다', description='', action=null, icon=null }) => (
+      <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-zinc-200 dark:border-zinc-800 p-10 text-center">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+          {icon || <IconListTodo/>}
+        </div>
+        <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+        {description && <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{description}</p>}
+        {action && <div className="mt-4">{action}</div>}
+      </div>
+    );
+
+    // ========================================
+    // 📝 Todo Form Dialog (Add / Edit)
+    // ========================================
+    const TodoFormDialog = ({ open, onOpenChange, initial, users, onSubmit, submitting }) => {
+      const isEdit = Boolean(initial && initial.id);
+      const [title, setTitle]           = useState('');
+      const [description, setDescription] = useState('');
+      const [userId, setUserId]         = useState('');
+      const [priority, setPriority]     = useState('medium');
+      const [status, setStatus]         = useState('pending');
+      const [dueDate, setDueDate]       = useState('');
+      const [errors, setErrors]         = useState({});
+
+      useEffect(() => {
+        if (open) {
+          setTitle(initial?.title || '');
+          setDescription(initial?.description || '');
+          setUserId(initial?.user_id != null ? String(initial.user_id) : '');
+          setPriority(initial?.priority || 'medium');
+          setStatus(initial?.status || 'pending');
+          setDueDate(initial?.due_date || '');
+          setErrors({});
+        }
+      }, [open, initial]);
+
+      const submit = (e) => {
+        e.preventDefault();
+        const errs = {};
+        if (!title.trim()) errs.title = '제목을 입력해 주세요.';
+        setErrors(errs);
+        if (Object.keys(errs).length) return;
+
+        onSubmit({
+          id: initial?.id,
+          title: title.trim(),
+          description: description.trim(),
+          user_id: userId === '' ? null : Number(userId),
+          priority,
+          status,
+          due_date: dueDate || null,
+        });
+      };
+
+      return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+          <DialogClose onClick={() => onOpenChange(false)}/>
+          <DialogHeader>
+            <DialogTitle>{isEdit ? '할일 편집' : '새 할일 추가'}</DialogTitle>
+            <DialogDescription>
+              {isEdit ? '선택한 할일의 내용을 수정합니다.' : '할일의 세부 정보를 입력하세요.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={submit} className="grid gap-4" noValidate>
+            <div className="grid gap-2">
+              <Label htmlFor="todo-title">제목</Label>
+              <Input id="todo-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="예: 릴리즈 노트 초안 작성" disabled={submitting}/>
+              {errors.title && <p className="text-xs text-red-600 dark:text-red-400">{errors.title}</p>}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="todo-desc">설명</Label>
+              <Textarea id="todo-desc" value={description} onChange={e => setDescription(e.target.value)} placeholder="세부 설명을 입력하세요 (선택)" disabled={submitting}/>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="todo-assignee">담당자</Label>
+                <Select id="todo-assignee" value={userId} onChange={e => setUserId(e.target.value)} disabled={submitting}>
+                  <option value="">담당자 없음</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="todo-due">마감일</Label>
+                <Input id="todo-due" type="date" value={dueDate || ''} onChange={e => setDueDate(e.target.value)} disabled={submitting}/>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="todo-priority">우선순위</Label>
+                <Select id="todo-priority" value={priority} onChange={e => setPriority(e.target.value)} disabled={submitting}>
+                  {PRIORITY.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="todo-status">상태</Label>
+                <Select id="todo-status" value={status} onChange={e => setStatus(e.target.value)} disabled={submitting}>
+                  {STATUS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </Select>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>취소</Button>
+              <Button type="submit" disabled={submitting}>{submitting ? '저장 중...' : (isEdit ? '변경 저장' : '추가하기')}</Button>
+            </DialogFooter>
+          </form>
+        </Dialog>
+      );
+    };
+
+    // ========================================
+    // 🧺 Confirm Dialog
+    // ========================================
+    const ConfirmDialog = ({ open, onOpenChange, title, description, confirmLabel='확인', destructive=true, onConfirm, submitting }) => (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogClose onClick={() => onOpenChange(false)}/>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>취소</Button>
+          <Button variant={destructive ? 'destructive' : 'default'} onClick={onConfirm} disabled={submitting}>
+            {submitting ? '처리 중...' : confirmLabel}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    );
+
+    // ========================================
+    // 📋 Todos Page
+    // ========================================
+    const TodosPage = ({ todos, users, loading, reload, onRequestNew }) => {
+      const toast = useToast();
+      const [search, setSearch]       = useState('');
+      const [filterStatus, setFS]     = useState('all');
+      const [filterPriority, setFP]   = useState('all');
+      const [selected, setSelected]   = useState(new Set());
+
+      const [editOpen, setEditOpen]   = useState(false);
+      const [editing, setEditing]     = useState(null);
+      const [saving, setSaving]       = useState(false);
+
+      const [confirmOpen, setConfirmOpen] = useState(false);
+      const [confirmCfg, setConfirmCfg]   = useState(null);
+      const [confirmBusy, setConfirmBusy] = useState(false);
+
+      const filtered = useMemo(() => {
+        return todos.filter(t => {
+          if (filterStatus !== 'all' && t.status !== filterStatus) return false;
+          if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
+          if (search.trim()) {
+            const q = search.toLowerCase();
+            if (!(t.title || '').toLowerCase().includes(q) &&
+                !(t.description || '').toLowerCase().includes(q)) return false;
+          }
+          return true;
+        });
+      }, [todos, search, filterStatus, filterPriority]);
+
+      const allSelected = filtered.length > 0 && filtered.every(t => selected.has(t.id));
+      const someSelected = filtered.some(t => selected.has(t.id)) && !allSelected;
+
+      const toggleAll = (checked) => {
+        const next = new Set(selected);
+        if (checked) filtered.forEach(t => next.add(t.id));
+        else         filtered.forEach(t => next.delete(t.id));
+        setSelected(next);
+      };
+      const toggleOne = (id, checked) => {
+        const next = new Set(selected);
+        if (checked) next.add(id); else next.delete(id);
+        setSelected(next);
+      };
+
+      const openEdit = (t) => { setEditing(t); setEditOpen(true); };
+      const openNew  = () => { setEditing(null); setEditOpen(true); };
+
+      useEffect(() => {
+        if (onRequestNew) onRequestNew.current = openNew;
+      }, [onRequestNew]);
+
+      const saveTodo = async (data) => {
+        setSaving(true);
+        try {
+          if (data.id) {
+            await api(`/admin/todos/${data.id}`, {
+              method: 'PATCH',
+              body: {
+                title: data.title,
+                description: data.description,
+                user_id: data.user_id,
+                priority: data.priority,
+                status: data.status,
+                due_date: data.due_date,
+              },
+            });
+            toast.success('할일을 수정했습니다.');
+          } else {
+            await api('/admin/todos', {
+              method: 'POST',
+              body: {
+                title: data.title,
+                description: data.description,
+                user_id: data.user_id,
+                priority: data.priority,
+                status: data.status,
+                due_date: data.due_date,
+              },
+            });
+            toast.success('새 할일을 추가했습니다.');
+          }
+          setEditOpen(false);
+          await reload();
+        } catch (err) {
+          toast.error(err.message || '저장에 실패했습니다.');
+        } finally {
+          setSaving(false);
+        }
+      };
+
+      const askDelete = (ids) => {
+        setConfirmCfg({
+          title: ids.length > 1 ? `${ids.length}개의 할일을 삭제할까요?` : '이 할일을 삭제할까요?',
+          description: '삭제된 항목은 복구할 수 없습니다. 계속 진행하시겠습니까?',
+          confirmLabel: '삭제',
+          onConfirm: async () => {
+            setConfirmBusy(true);
+            try {
+              if (ids.length > 1) {
+                await api('/admin/todos/bulk-delete', {
+                  method: 'POST',
+                  body: { ids },
+                });
+              } else {
+                await api(`/admin/todos/${ids[0]}`, { method: 'DELETE' });
+              }
+              toast.success(`${ids.length}건을 삭제했습니다.`);
+              setConfirmOpen(false);
+              setSelected(prev => {
+                const next = new Set(prev);
+                ids.forEach(id => next.delete(id));
+                return next;
+              });
+              await reload();
+            } catch (err) {
+              toast.error(err.message || '삭제에 실패했습니다.');
+            } finally {
+              setConfirmBusy(false);
+            }
+          }
+        });
+        setConfirmOpen(true);
+      };
+
+      const userById = useMemo(() => {
+        const m = {};
+        for (const u of users) m[u.id] = u;
+        return m;
+      }, [users]);
+
+      return (
+        <div className="space-y-4">
+          {/* Filter Bar */}
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="relative w-full sm:max-w-sm">
+                  <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 dark:text-zinc-400"/>
+                  <Input
+                    aria-label="할일 검색"
+                    className="pl-9"
+                    placeholder="제목 또는 설명 검색..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="w-full sm:w-40">
+                    <Select aria-label="상태 필터" value={filterStatus} onChange={e => setFS(e.target.value)}>
+                      <option value="all">모든 상태</option>
+                      {STATUS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </Select>
+                  </div>
+                  <div className="w-full sm:w-40">
+                    <Select aria-label="우선순위 필터" value={filterPriority} onChange={e => setFP(e.target.value)}>
+                      <option value="all">모든 우선순위</option>
+                      {PRIORITY.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </Select>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => { setSearch(''); setFS('all'); setFP('all'); }}>
+                    초기화
+                  </Button>
+                  <Button size="sm" onClick={openNew}><IconPlus/> 새 할일</Button>
+                </div>
+              </div>
+
+              {selected.size > 0 && (
+                <div className="mt-3 flex items-center justify-between rounded-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-3 py-2">
+                  <span className="text-sm">
+                    <span className="font-medium">{selected.size}</span>개 선택됨
+                  </span>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setSelected(new Set())}>선택 해제</Button>
+                    <Button size="sm" variant="destructive" onClick={() => askDelete([...selected])}>
+                      <IconTrash/> 선택 삭제
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Loading skeleton for the list */}
+          {loading ? (
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} className="flex items-center gap-3 py-2">
+                    <Skeleton className="h-4 w-4"/>
+                    <Skeleton className="h-4 flex-1"/>
+                    <Skeleton className="h-5 w-16"/>
+                    <Skeleton className="h-5 w-20"/>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : (
+            <React.Fragment>
+              {/* Desktop Table */}
+              <Card className="hidden md:block">
+                <CardContent className="p-0">
+                  {filtered.length === 0 ? (
+                    <div className="p-6">
+                      <EmptyState
+                        title="일치하는 할일이 없습니다"
+                        description="검색어나 필터를 변경하거나, 새 할일을 추가해 보세요."
+                        action={<Button onClick={openNew}><IconPlus/> 새 할일</Button>}
+                      />
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10">
+                            <Checkbox
+                              checked={allSelected}
+                              indeterminate={someSelected}
+                              onCheckedChange={toggleAll}
+                              aria-label="현재 페이지 전체 선택"
+                            />
+                          </TableHead>
+                          <TableHead className="w-14">ID</TableHead>
+                          <TableHead>제목</TableHead>
+                          <TableHead>담당자</TableHead>
+                          <TableHead>우선순위</TableHead>
+                          <TableHead>상태</TableHead>
+                          <TableHead>마감일</TableHead>
+                          <TableHead className="text-right">액션</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filtered.map(t => {
+                          const isSel = selected.has(t.id);
+                          const displayName = t.user_name || userById[t.user_id]?.name || t.user_email || '미지정';
+                          return (
+                            <TableRow key={t.id} className={isSel ? 'bg-zinc-50 dark:bg-zinc-900' : ''}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={isSel}
+                                  onCheckedChange={(v) => toggleOne(t.id, v)}
+                                  aria-label={`${t.title} 선택`}
+                                />
+                              </TableCell>
+                              <TableCell className="text-xs text-zinc-500 dark:text-zinc-400">#{t.id}</TableCell>
+                              <TableCell>
+                                <div className="min-w-0">
+                                  <p className="font-medium tracking-tight truncate">{t.title}</p>
+                                  {t.description && <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{t.description}</p>}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Avatar name={displayName}/>
+                                  <span className="text-sm">{displayName}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell><Badge variant={t.priority}>{priorityLabel(t.priority)}</Badge></TableCell>
+                              <TableCell><Badge variant={t.status}>{statusLabel(t.status)}</Badge></TableCell>
+                              <TableCell className="text-sm text-zinc-600 dark:text-zinc-300">{t.due_date || '-'}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="inline-flex gap-1">
+                                  <Button variant="ghost" size="icon" onClick={() => openEdit(t)} aria-label={`${t.title} 편집`}><IconEdit/></Button>
+                                  <Button variant="ghost" size="icon" onClick={() => askDelete([t.id])} aria-label={`${t.title} 삭제`}>
+                                    <IconTrash/>
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Mobile Card List */}
+              <div className="md:hidden space-y-3">
+                {filtered.length === 0 ? (
+                  <EmptyState
+                    title="일치하는 할일이 없습니다"
+                    description="검색어나 필터를 변경해 보세요."
+                    action={<Button onClick={openNew}><IconPlus/> 새 할일</Button>}
+                  />
+                ) : filtered.map(t => {
+                  const isSel = selected.has(t.id);
+                  const displayName = t.user_name || userById[t.user_id]?.name || t.user_email || '미지정';
+                  return (
+                    <Card key={t.id} className={isSel ? 'ring-2 ring-zinc-950 dark:ring-zinc-300' : ''}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={isSel}
+                            onCheckedChange={(v) => toggleOne(t.id, v)}
+                            aria-label={`${t.title} 선택`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-xs text-zinc-500 dark:text-zinc-400">#{t.id}</p>
+                                <p className="font-medium tracking-tight truncate">{t.title}</p>
+                                {t.description && <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2">{t.description}</p>}
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                <Button variant="ghost" size="icon" onClick={() => openEdit(t)} aria-label="편집"><IconEdit/></Button>
+                                <Button variant="ghost" size="icon" onClick={() => askDelete([t.id])} aria-label="삭제"><IconTrash/></Button>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <Badge variant={t.priority}>{priorityLabel(t.priority)}</Badge>
+                              <Badge variant={t.status}>{statusLabel(t.status)}</Badge>
+                              <Badge variant="outline">마감 {t.due_date || '미정'}</Badge>
+                            </div>
+
+                            <div className="mt-3 flex items-center gap-2">
+                              <Avatar name={displayName}/>
+                              <span className="text-sm">{displayName}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </React.Fragment>
+          )}
+
+          <TodoFormDialog
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            initial={editing}
+            users={users}
+            onSubmit={saveTodo}
+            submitting={saving}
+          />
+          {confirmCfg && (
+            <ConfirmDialog
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              title={confirmCfg.title}
+              description={confirmCfg.description}
+              confirmLabel={confirmCfg.confirmLabel}
+              onConfirm={confirmCfg.onConfirm}
+              submitting={confirmBusy}
+            />
+          )}
+        </div>
+      );
+    };
+
+    // ========================================
+    // 👥 Users Page
+    // ========================================
+    const UsersPage = ({ users, currentUser, loading, reload }) => {
+      const toast = useToast();
+      const canEdit = isSuperAdmin(currentUser?.role);
+
+      const [confirmOpen, setConfirmOpen] = useState(false);
+      const [confirmCfg, setConfirmCfg]   = useState(null);
+      const [confirmBusy, setConfirmBusy] = useState(false);
+
+      // per-user busy state for role change
+      const [busyIds, setBusyIds] = useState(new Set());
+      const setBusy = (id, v) => {
+        setBusyIds(prev => {
+          const next = new Set(prev);
+          if (v) next.add(id); else next.delete(id);
+          return next;
+        });
+      };
+
+      const changeRole = async (u, newRole) => {
+        if (u.role === newRole) return;
+        setBusy(u.id, true);
+        try {
+          await api(`/admin/users/${u.id}`, {
+            method: 'PATCH',
+            body: { role: newRole },
+          });
+          toast.success(`${u.name || u.email}의 역할을 ${roleLabel(newRole)}(으)로 변경했습니다.`);
+          await reload();
+        } catch (err) {
+          toast.error(err.message || '역할 변경에 실패했습니다.');
+        } finally {
+          setBusy(u.id, false);
+        }
+      };
+
+      const askDelete = (u) => {
+        setConfirmCfg({
+          title: '사용자를 삭제할까요?',
+          description: `${u.name || u.email} 계정을 삭제합니다. 이 작업은 되돌릴 수 없습니다.`,
+          confirmLabel: '삭제',
+          onConfirm: async () => {
+            setConfirmBusy(true);
+            try {
+              await api(`/admin/users/${u.id}`, { method: 'DELETE' });
+              toast.success('사용자를 삭제했습니다.');
+              setConfirmOpen(false);
+              await reload();
+            } catch (err) {
+              toast.error(err.message || '삭제에 실패했습니다.');
+            } finally {
+              setConfirmBusy(false);
+            }
+          }
+        });
+        setConfirmOpen(true);
+      };
+
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>사용자 관리</CardTitle>
+            <CardDescription>
+              팀원 목록과 할당된 할일 수입니다.
+              {!canEdit && <span className="ml-1 text-amber-600 dark:text-amber-400">(수정/삭제는 super_admin 권한이 필요합니다.)</span>}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="p-4 space-y-3">
+                {[1,2,3].map(i => (
+                  <div key={i} className="flex items-center gap-3 py-2">
+                    <Skeleton className="h-8 w-8 rounded-full"/>
+                    <Skeleton className="h-4 flex-1"/>
+                    <Skeleton className="h-5 w-20"/>
+                  </div>
+                ))}
+              </div>
+            ) : users.length === 0 ? (
+              <div className="p-6">
+                <EmptyState title="사용자가 없습니다" description="등록된 사용자가 없습니다."/>
+              </div>
+            ) : (
+              <React.Fragment>
+                {/* Desktop */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>이름</TableHead>
+                        <TableHead>이메일</TableHead>
+                        <TableHead>역할</TableHead>
+                        <TableHead className="text-right">할당된 할일</TableHead>
+                        <TableHead className="text-right">액션</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map(u => {
+                        const busy = busyIds.has(u.id);
+                        const isSelf = currentUser?.id === u.id;
+                        return (
+                          <TableRow key={u.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar name={u.name || u.email}/>
+                                <span className="font-medium tracking-tight">{u.name || '-'}</span>
+                                {isSelf && <Badge variant="outline">나</Badge>}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm text-zinc-600 dark:text-zinc-300">{u.email}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={u.role}>{roleLabel(u.role)}</Badge>
+                                <div className="w-36">
+                                  <Select
+                                    value={u.role}
+                                    onChange={e => changeRole(u, e.target.value)}
+                                    disabled={!canEdit || busy}
+                                    title={!canEdit ? 'super_admin 권한이 필요합니다.' : undefined}
+                                    aria-label={`${u.name || u.email} 역할 변경`}
+                                  >
+                                    {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                                  </Select>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Badge variant="secondary">{u.todo_count ?? 0}건</Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => askDelete(u)}
+                                disabled={!canEdit || isSelf}
+                                title={
+                                  !canEdit ? 'super_admin 권한이 필요합니다.' :
+                                  isSelf ? '본인 계정은 삭제할 수 없습니다.' : undefined
+                                }
+                                aria-label={`${u.name || u.email} 삭제`}
+                              >
+                                <IconTrash/>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                {/* Mobile */}
+                <div className="md:hidden divide-y divide-zinc-200 dark:divide-zinc-800">
+                  {users.map(u => {
+                    const busy = busyIds.has(u.id);
+                    const isSelf = currentUser?.id === u.id;
+                    return (
+                      <div key={u.id} className="p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <Avatar name={u.name || u.email}/>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium tracking-tight truncate">{u.name || '-'}</p>
+                                {isSelf && <Badge variant="outline">나</Badge>}
+                              </div>
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{u.email}</p>
+                            </div>
+                          </div>
+                          <Badge variant="secondary">{u.todo_count ?? 0}건</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={u.role}>{roleLabel(u.role)}</Badge>
+                          <div className="flex-1">
+                            <Select
+                              value={u.role}
+                              onChange={e => changeRole(u, e.target.value)}
+                              disabled={!canEdit || busy}
+                              title={!canEdit ? 'super_admin 권한이 필요합니다.' : undefined}
+                              aria-label={`${u.name || u.email} 역할 변경`}
+                            >
+                              {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                            </Select>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => askDelete(u)}
+                            disabled={!canEdit || isSelf}
+                            title={
+                              !canEdit ? 'super_admin 권한이 필요합니다.' :
+                              isSelf ? '본인 계정은 삭제할 수 없습니다.' : undefined
+                            }
+                            aria-label={`${u.name || u.email} 삭제`}
+                          >
+                            <IconTrash/>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </React.Fragment>
+            )}
+          </CardContent>
+
+          {confirmCfg && (
+            <ConfirmDialog
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              title={confirmCfg.title}
+              description={confirmCfg.description}
+              confirmLabel={confirmCfg.confirmLabel}
+              onConfirm={confirmCfg.onConfirm}
+              submitting={confirmBusy}
+            />
+          )}
+        </Card>
+      );
+    };
+
+    // ========================================
+    // 🚀 AdminApp (authed)
+    // ========================================
+    const AdminApp = ({ currentUser, onLogout }) => {
+      const toast = useToast();
+      const [tab, setTab]         = useState('dashboard');
+
+      const [stats, setStats]     = useState(null);
+      const [todos, setTodos]     = useState([]);
+      const [users, setUsers]     = useState([]);
+
+      const [loadingStats, setLoadingStats] = useState(true);
+      const [loadingTodos, setLoadingTodos] = useState(true);
+      const [loadingUsers, setLoadingUsers] = useState(true);
+
+      const todosNewRef = useRef(null);
+
+      const loadStats = useCallback(async () => {
+        setLoadingStats(true);
+        try {
+          const data = await api('/admin/stats');
+          setStats(data);
+        } catch (err) {
+          toast.error(`통계 로드 실패: ${err.message}`);
+        } finally {
+          setLoadingStats(false);
+        }
+      }, [toast]);
+
+      const loadTodos = useCallback(async () => {
+        setLoadingTodos(true);
+        try {
+          const data = await api('/admin/todos');
+          setTodos(Array.isArray(data) ? data : []);
+        } catch (err) {
+          toast.error(`할일 로드 실패: ${err.message}`);
+        } finally {
+          setLoadingTodos(false);
+        }
+      }, [toast]);
+
+      const loadUsers = useCallback(async () => {
+        setLoadingUsers(true);
+        try {
+          const data = await api('/admin/users');
+          setUsers(Array.isArray(data) ? data : []);
+        } catch (err) {
+          toast.error(`사용자 로드 실패: ${err.message}`);
+        } finally {
+          setLoadingUsers(false);
+        }
+      }, [toast]);
+
+      const reloadAll = useCallback(async () => {
+        await Promise.all([loadStats(), loadTodos(), loadUsers()]);
+      }, [loadStats, loadTodos, loadUsers]);
+
+      // reload after todo CUD
+      const reloadAfterTodoMutation = useCallback(async () => {
+        await Promise.all([loadStats(), loadTodos(), loadUsers()]);
+      }, [loadStats, loadTodos, loadUsers]);
+
+      // reload after user CUD
+      const reloadAfterUserMutation = useCallback(async () => {
+        await Promise.all([loadStats(), loadUsers()]);
+      }, [loadStats, loadUsers]);
+
+      useEffect(() => {
+        reloadAll();
+      }, [reloadAll]);
+
+      const handleNewTodo = () => {
+        setTab('todos');
+        setTimeout(() => { todosNewRef.current && todosNewRef.current(); }, 0);
+      };
+
+      return (
+        <div className="min-h-screen bg-white text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
+          <Header onNewTodo={handleNewTodo} user={currentUser} onLogout={onLogout}/>
+          <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+            <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">관리자 대시보드</h1>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">팀의 할일과 사용자 현황을 한 곳에서 관리하세요.</p>
+              </div>
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                로그인 역할: <Badge variant={currentUser?.role || 'outline'}>{roleLabel(currentUser?.role || '')}</Badge>
+              </div>
+            </div>
+
+            <Tabs value={tab} onValueChange={setTab}>
+              <TabsList>
+                <TabsTrigger value="dashboard"><IconLayout/> Dashboard</TabsTrigger>
+                <TabsTrigger value="todos"><IconListTodo/> Todos</TabsTrigger>
+                <TabsTrigger value="users"><IconUsers/> Users</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="dashboard">
+                <Dashboard
+                  stats={stats}
+                  loading={loadingStats}
+                  onJumpTodos={() => setTab('todos')}
+                />
+              </TabsContent>
+
+              <TabsContent value="todos">
+                <TodosPage
+                  todos={todos}
+                  users={users}
+                  loading={loadingTodos || loadingUsers}
+                  reload={reloadAfterTodoMutation}
+                  onRequestNew={todosNewRef}
+                />
+              </TabsContent>
+
+              <TabsContent value="users">
+                <UsersPage
+                  users={users}
+                  currentUser={currentUser}
+                  loading={loadingUsers}
+                  reload={reloadAfterUserMutation}
+                />
+              </TabsContent>
+            </Tabs>
+
+            <Separator className="my-10"/>
+            <footer className="pb-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
+              Todo Admin · shadcn-inspired UI · Built with React + Tailwind
+            </footer>
+          </main>
+        </div>
+      );
+    };
+
+    // ========================================
+    // 🚀 App (Login / Admin gate)
+    // ========================================
+    const App = () => {
+      const { token, user, isAuthed, login, logout } = useAuth();
+
+      // 토큰은 있지만 role이 관리자 아닌 경우에 대한 방어
+      useEffect(() => {
+        if (isAuthed && !isAdminRole(user?.role)) {
+          logout();
+        }
+      }, [isAuthed, user, logout]);
+
+      if (!isAuthed || !isAdminRole(user?.role)) {
+        return <LoginScreen onLogin={login}/>;
+      }
+      return <AdminApp currentUser={user} onLogout={logout}/>;
+    };
+
+    // ========================================
+    // Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      <ThemeProvider>
+        <ToastProvider>
+          <App/>
+        </ToastProvider>
+      </ThemeProvider>
+    );
+  </script>
+</body>
+</html>

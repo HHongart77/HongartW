@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>할 일 목록</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Archivo+Black&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f4f0;
+      --surface: #ffffff;
+      --ink: #0a0a0a;
+      --ink-soft: #1a1a1a;
+      --ink-mute: #6b6b6b;
+      --accent: #ff2e1f;
+      --accent-soft: #fde047;
+      --line: #0a0a0a;
+      --danger: #dc2626;
+      --shadow: 6px 6px 0 #0a0a0a;
+      --shadow-sm: 3px 3px 0 #0a0a0a;
+    }
+    html, body { background: var(--bg); }
+    body {
+      font-family: 'Space Mono', 'JetBrains Mono', 'Courier New', ui-monospace, monospace;
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: 0;
+    }
+    h1, h2, h3 {
+      font-family: 'Archivo Black', 'Space Mono', monospace !important;
+      font-weight: 900 !important;
+      text-transform: uppercase;
+      letter-spacing: -0.02em;
+      color: var(--ink) !important;
+    }
+    /* kill all roundness — brutalism */
+    [class*="rounded"] { border-radius: 0 !important; }
+
+    .ink { color: var(--ink); }
+    .ink-soft { color: var(--ink-soft); }
+    .ink-mute { color: var(--ink-mute); }
+    .bg-surface { background: var(--surface); }
+    .border-line { border-color: var(--ink) !important; border-width: 2px !important; }
+    .bg-accent-soft { background: var(--accent-soft); }
+    .text-accent { color: var(--accent); }
+    .text-danger { color: var(--danger); font-weight: 700; }
+    .ring-accent:focus { outline: 3px solid var(--accent); outline-offset: 2px; box-shadow: none; }
+    .caret-accent { caret-color: var(--accent); }
+
+    /* ---- Brutalist primitives ---- */
+    .brutal-card {
+      background: var(--surface);
+      border: 3px solid var(--ink);
+      box-shadow: var(--shadow);
+    }
+    .brutal-input {
+      background: var(--surface);
+      border: 3px solid var(--ink);
+      padding: 14px 16px;
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 16px;
+      width: 100%;
+      color: var(--ink);
+      transition: box-shadow 0.08s ease, transform 0.08s ease;
+    }
+    .brutal-input::placeholder { color: var(--ink-mute); font-weight: 400; }
+    .brutal-input:focus {
+      outline: none;
+      box-shadow: var(--shadow);
+      transform: translate(-2px, -2px);
+    }
+    .brutal-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: var(--ink);
+      color: #fff;
+      border: 3px solid var(--ink);
+      padding: 14px 18px;
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
+      box-shadow: var(--shadow);
+    }
+    .brutal-btn:hover:not(:disabled) {
+      transform: translate(2px, 2px);
+      box-shadow: 2px 2px 0 var(--ink);
+    }
+    .brutal-btn:active:not(:disabled) { transform: translate(6px, 6px); box-shadow: none; }
+    .brutal-btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; transform: none; }
+    .brutal-btn.accent { background: var(--accent-soft); color: var(--ink); }
+    .brutal-btn.warn { background: var(--accent); color: #fff; }
+    .brutal-btn.danger { background: var(--danger); color: #fff; }
+    .brutal-btn.ghost { background: var(--surface); color: var(--ink); }
+
+    .brutal-tab {
+      background: var(--surface);
+      border: 3px solid var(--ink);
+      padding: 8px 14px;
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      color: var(--ink);
+      transition: all 0.08s ease;
+    }
+    .brutal-tab:hover { background: var(--accent-soft); }
+    .brutal-tab.active { background: var(--ink); color: #fff; box-shadow: var(--shadow-sm); }
+
+    .brutal-checkbox {
+      width: 26px;
+      height: 26px;
+      border: 3px solid var(--ink);
+      background: var(--surface);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.08s ease;
+    }
+    .brutal-checkbox.checked { background: var(--accent-soft); }
+
+    .brutal-list-item {
+      border: 3px solid var(--ink);
+      background: var(--surface);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .brutal-list-item.completed { background: var(--accent-soft); }
+
+    .brutal-icon-btn {
+      background: var(--surface);
+      border: 2px solid var(--ink);
+      width: 34px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--ink);
+      transition: all 0.08s ease;
+      flex-shrink: 0;
+    }
+    .brutal-icon-btn:hover { background: var(--danger); color: #fff; }
+
+    .label-tag {
+      display: inline-block;
+      background: var(--ink);
+      color: #fff;
+      padding: 4px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .label-tag.accent { background: var(--accent); }
+    .label-tag.soft { background: var(--accent-soft); color: var(--ink); }
+
+    .brutal-table { width: 100%; border-collapse: collapse; }
+    .brutal-table th, .brutal-table td {
+      border: 2px solid var(--ink);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    .brutal-table thead th {
+      background: var(--ink);
+      color: #fff;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+    }
+    .brutal-table tbody tr:nth-child(even) { background: var(--accent-soft); }
+    .brutal-table select {
+      background: var(--surface);
+      border: 2px solid var(--ink);
+      padding: 4px 6px;
+      font-family: inherit;
+      font-weight: 700;
+    }
+
+    .fade-in { animation: fadeIn 0.12s ease both; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-3px, -3px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    /* page background grid */
+    body {
+      background-image:
+        linear-gradient(var(--ink) 1px, transparent 1px),
+        linear-gradient(90deg, var(--ink) 1px, transparent 1px);
+      background-size: 40px 40px;
+      background-position: -1px -1px;
+      background-color: var(--bg);
+      background-attachment: fixed;
+      background-blend-mode: normal;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background: rgba(244, 244, 240, 0.92);
+      pointer-events: none;
+      z-index: 0;
+    }
+    #root { position: relative; z-index: 1; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo, useRef, useEffect } = React;
+
+    // ========================================
+    // Auth storage + fetch helper
+    // ========================================
+    const TOKEN_KEY = 'todo_app_01_token';
+    const getToken = () => localStorage.getItem(TOKEN_KEY);
+    const setToken = (t) => t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY);
+
+    async function apiFetch(url, options = {}) {
+      const token = getToken();
+      const headers = { ...(options.headers || {}) };
+      if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(url, { ...options, headers });
+      const isJson = res.headers.get('content-type')?.includes('application/json');
+      const body = isJson ? await res.json() : null;
+      if (!res.ok) {
+        const err = new Error(body?.error || `HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
+      return body;
+    }
+
+    // ========================================
+    // Design System
+    // ========================================
+    function IconButton({ onClick, ariaLabel, children, className = '' }) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={ariaLabel}
+          className={`brutal-icon-btn ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Checkbox({ checked, onChange, ariaLabel }) {
+      return (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={checked}
+          aria-label={ariaLabel}
+          onClick={onChange}
+          className={`brutal-checkbox ${checked ? 'checked' : ''}`}
+        >
+          {checked && (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 7L6 11L12 3" stroke="#0a0a0a" strokeWidth="3" strokeLinecap="square" strokeLinejoin="miter"/>
+            </svg>
+          )}
+        </button>
+      );
+    }
+
+    function FilterTab({ active, onClick, children }) {
+      return (
+        <button
+          type="button"
+          onClick={onClick}
+          className={`brutal-tab ${active ? 'active' : ''}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function TextField({ label, type = 'text', value, onChange, placeholder, autoFocus }) {
+      return (
+        <label className="block">
+          <span className="label-tag mb-2 inline-block">{label}</span>
+          <input
+            type={type}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            autoFocus={autoFocus}
+            className="brutal-input caret-accent"
+          />
+        </label>
+      );
+    }
+
+    function PrimaryButton({ onClick, disabled, children, type = 'button' }) {
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          className="brutal-btn warn w-full"
+        >
+          {children}
+        </button>
+      );
+    }
+
+    // ========================================
+    // AuthPage (login / signup)
+    // ========================================
+    function AuthPage({ onAuth }) {
+      const [mode, setMode] = useState('login');
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [name, setName] = useState('');
+      const [error, setError] = useState(null);
+      const [submitting, setSubmitting] = useState(false);
+
+      const isLogin = mode === 'login';
+
+      const submit = async (e) => {
+        e?.preventDefault?.();
+        setError(null);
+        if (!email.trim() || !password) {
+          setError('이메일과 비밀번호를 입력해주세요.');
+          return;
+        }
+        setSubmitting(true);
+        try {
+          const body = isLogin
+            ? { email: email.trim(), password }
+            : { email: email.trim(), password, name: name.trim() || undefined };
+          const res = await apiFetch(`/api/${isLogin ? 'login' : 'signup'}`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+          });
+          setToken(res.token);
+          onAuth(res.user);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const switchMode = (next) => {
+        setMode(next);
+        setError(null);
+      };
+
+      return (
+        <main className="min-h-screen w-full flex items-start md:items-center justify-center px-6 py-16 md:py-24">
+          <section className="w-full max-w-sm brutal-card p-8">
+            <header className="mb-8">
+              <span className="label-tag accent">WELCOME</span>
+              <h1 className="text-4xl md:text-5xl mt-3">
+                TO·DO
+              </h1>
+              <p className="mt-3 text-sm" style={{ fontWeight: 700 }}>
+                ▸ {isLogin ? '로그인하고 하루를 시작해요.' : '계정을 만들어 할 일을 관리해요.'}
+              </p>
+            </header>
+
+            <div className="flex items-center gap-2 mb-8">
+              <FilterTab active={isLogin} onClick={() => switchMode('login')}>로그인</FilterTab>
+              <FilterTab active={!isLogin} onClick={() => switchMode('signup')}>회원가입</FilterTab>
+            </div>
+
+            <form onSubmit={submit} className="space-y-6">
+              <TextField
+                label="이메일"
+                type="email"
+                value={email}
+                onChange={setEmail}
+                placeholder="you@example.com"
+                autoFocus
+              />
+              <TextField
+                label="비밀번호"
+                type="password"
+                value={password}
+                onChange={setPassword}
+                placeholder={isLogin ? '' : '8자 이상'}
+              />
+              {!isLogin && (
+                <TextField
+                  label="이름 (선택)"
+                  value={name}
+                  onChange={setName}
+                  placeholder="표시할 이름"
+                />
+              )}
+
+              {error && (
+                <p className="text-sm text-danger">{error}</p>
+              )}
+
+              <PrimaryButton type="submit" disabled={submitting}>
+                {submitting ? '처리 중…' : (isLogin ? '로그인' : '가입하기')}
+              </PrimaryButton>
+            </form>
+          </section>
+        </main>
+      );
+    }
+
+    // ========================================
+    // TodoPage
+    // ========================================
+    const FILTERS = {
+      all: '전체',
+      active: '진행 중',
+      completed: '완료'
+    };
+
+    function TodoItem({ todo, onToggle, onDelete }) {
+      return (
+        <li className={`fade-in brutal-list-item ${todo.completed ? 'completed' : ''}`}>
+          <Checkbox
+            checked={todo.completed}
+            onChange={() => onToggle(todo.id)}
+            ariaLabel={todo.completed ? '완료 해제' : '완료로 표시'}
+          />
+          <span
+            className="flex-1 text-base md:text-[17px]"
+            style={{
+              color: 'var(--ink)',
+              fontWeight: 700,
+              textDecoration: todo.completed ? 'line-through' : 'none',
+              opacity: todo.completed ? 0.6 : 1
+            }}
+          >
+            {todo.text}
+          </span>
+          <IconButton
+            onClick={() => onDelete(todo.id)}
+            ariaLabel="할 일 삭제"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 2L12 12M12 2L2 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square"/>
+            </svg>
+          </IconButton>
+        </li>
+      );
+    }
+
+    // ========================================
+    // AdminPage
+    // ========================================
+    const ROLE_LABEL = { user: '일반', admin: '관리자', super_admin: '슈퍼관리자' };
+    const ROLE_OPTIONS = ['user', 'admin', 'super_admin'];
+
+    function AdminPage({ user, onLogout, onNavigate }) {
+      const [tab, setTab] = useState('users');
+      const [users, setUsers] = useState([]);
+      const [todos, setTodos] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      const isSuper = user.role === 'super_admin';
+
+      const loadAll = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const [u, t] = await Promise.all([
+            apiFetch('/api/admin/users'),
+            apiFetch('/api/admin/todos'),
+          ]);
+          setUsers(u);
+          setTodos(t);
+        } catch (e) {
+          if (e.status === 401) onLogout();
+          else setError(e.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      useEffect(() => { loadAll(); }, []);
+
+      const changeRole = async (id, role) => {
+        try {
+          const updated = await apiFetch(`/api/admin/users/${id}/role`, {
+            method: 'PATCH',
+            body: JSON.stringify({ role }),
+          });
+          setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role: updated.role } : u));
+        } catch (e) {
+          setError(e.message);
+        }
+      };
+
+      const deleteUser = async (id, email) => {
+        if (!confirm(`${email} 계정을 삭제할까요?\n이 사용자의 모든 할 일도 함께 삭제됩니다.`)) return;
+        try {
+          await apiFetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+          setUsers((prev) => prev.filter((u) => u.id !== id));
+          setTodos((prev) => prev.filter((t) => t.user_id !== id));
+        } catch (e) {
+          setError(e.message);
+        }
+      };
+
+      const deleteTodo = async (id) => {
+        if (!confirm('이 할 일을 삭제할까요?')) return;
+        try {
+          await apiFetch(`/api/admin/todos/${id}`, { method: 'DELETE' });
+          setTodos((prev) => prev.filter((t) => t.id !== id));
+          setUsers((prev) => prev.map((u) => {
+            const removed = todos.find((t) => t.id === id);
+            if (removed && removed.user_id === u.id) return { ...u, todo_count: Math.max(0, u.todo_count - 1) };
+            return u;
+          }));
+        } catch (e) {
+          setError(e.message);
+        }
+      };
+
+      return (
+        <main className="min-h-screen w-full flex items-start justify-center px-6 py-16 md:py-20">
+          <section className="w-full max-w-4xl">
+            {/* Top bar */}
+            <div className="flex items-center justify-between mb-8 brutal-card p-4">
+              <div>
+                <span className="label-tag accent">
+                  {isSuper ? 'SUPER ADMIN' : 'ADMIN'}
+                </span>
+                <p className="text-base mt-2" style={{ fontWeight: 700 }}>{user.name || user.email}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('#/')}
+                  className="brutal-btn ghost"
+                >
+                  할 일로
+                </button>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="brutal-btn ghost"
+                >
+                  로그아웃
+                </button>
+              </div>
+            </div>
+
+            <header className="mb-8 brutal-card p-6" style={{ background: 'var(--accent)' }}>
+              <span className="label-tag soft">ADMIN PANEL</span>
+              <h1 className="text-4xl md:text-5xl mt-3" style={{ color: '#fff' }}>관리자 패널</h1>
+              <p className="mt-3 text-sm" style={{ fontWeight: 700, color: '#fff' }}>
+                ▸ 사용자와 할 일을 통제하라.
+              </p>
+            </header>
+
+            <div className="flex items-center gap-2 mb-6 flex-wrap">
+              <FilterTab active={tab === 'users'} onClick={() => setTab('users')}>
+                사용자 ({users.length})
+              </FilterTab>
+              <FilterTab active={tab === 'todos'} onClick={() => setTab('todos')}>
+                할 일 ({todos.length})
+              </FilterTab>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={loadAll}
+                className="brutal-btn ghost"
+              >
+                ↻ 새로고침
+              </button>
+            </div>
+
+            {error && <p className="text-sm text-danger mb-4">{error}</p>}
+
+            {loading ? (
+              <div className="py-16 text-center ink-soft text-sm">불러오는 중…</div>
+            ) : tab === 'users' ? (
+              <div className="overflow-x-auto brutal-card">
+                <table className="brutal-table text-sm">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>이메일</th>
+                      <th>이름</th>
+                      <th>역할</th>
+                      <th>할 일</th>
+                      <th>가입일</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => {
+                      const isSelf = u.id === user.id;
+                      return (
+                        <tr key={u.id} className="fade-in">
+                          <td style={{ fontWeight: 700 }}>{u.id}</td>
+                          <td style={{ fontWeight: 700 }}>{u.email}</td>
+                          <td>{u.name || '-'}</td>
+                          <td>
+                            {isSuper && !isSelf ? (
+                              <select
+                                value={u.role}
+                                onChange={(e) => changeRole(u.id, e.target.value)}
+                              >
+                                {ROLE_OPTIONS.map((r) => (
+                                  <option key={r} value={r}>{ROLE_LABEL[r]}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="label-tag soft">{ROLE_LABEL[u.role] || u.role}</span>
+                            )}
+                          </td>
+                          <td style={{ fontWeight: 700 }}>{u.todo_count}</td>
+                          <td>{new Date(u.created_at).toLocaleDateString('ko-KR')}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            {isSuper && !isSelf && (
+                              <button
+                                type="button"
+                                onClick={() => deleteUser(u.id, u.email)}
+                                className="brutal-btn danger"
+                                style={{ padding: '6px 12px', fontSize: 11, boxShadow: 'none' }}
+                              >
+                                삭제
+                              </button>
+                            )}
+                            {isSelf && (
+                              <span className="label-tag accent">본인</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="overflow-x-auto brutal-card">
+                <table className="brutal-table text-sm">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>소유자</th>
+                      <th>내용</th>
+                      <th>상태</th>
+                      <th>생성</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {todos.map((t) => (
+                      <tr key={t.id} className="fade-in">
+                        <td style={{ fontWeight: 700 }}>{t.id}</td>
+                        <td>{t.user_email || <em className="ink-mute">(삭제됨)</em>}</td>
+                        <td style={{ textDecoration: t.completed ? 'line-through' : 'none', fontWeight: 700, opacity: t.completed ? 0.6 : 1 }}>
+                          {t.text}
+                        </td>
+                        <td>
+                          <span className={`label-tag ${t.completed ? 'soft' : 'accent'}`}>
+                            {t.completed ? '완료' : '진행'}
+                          </span>
+                        </td>
+                        <td>{new Date(t.created_at).toLocaleDateString('ko-KR')}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            onClick={() => deleteTodo(t.id)}
+                            className="brutal-btn danger"
+                            style={{ padding: '6px 12px', fontSize: 11, boxShadow: 'none' }}
+                          >
+                            삭제
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {todos.length === 0 && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: 40, textAlign: 'center', fontWeight: 700 }}>
+                          ▸ 할 일이 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </main>
+      );
+    }
+
+    function TodoPage({ user, onLogout, onNavigate }) {
+      const [todos, setTodos] = useState([]);
+      const [draft, setDraft] = useState('');
+      const [filter, setFilter] = useState('all');
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const inputRef = useRef(null);
+
+      useEffect(() => {
+        apiFetch('/api/todos')
+          .then((data) => { setTodos(data); setLoading(false); })
+          .catch((e) => {
+            if (e.status === 401) onLogout();
+            else { setError(e.message); setLoading(false); }
+          });
+        if (inputRef.current) inputRef.current.focus?.();
+      }, []);
+
+      const addTodo = async () => {
+        const text = draft.trim();
+        if (!text) return;
+        setDraft('');
+        try {
+          const todo = await apiFetch('/api/todos', {
+            method: 'POST',
+            body: JSON.stringify({ text }),
+          });
+          setTodos((prev) => [...prev, todo]);
+        } catch (e) {
+          if (e.status === 401) onLogout();
+          else setError(e.message);
+        }
+      };
+
+      const toggleTodo = async (id) => {
+        const todo = todos.find((t) => t.id === id);
+        setTodos((prev) => prev.map((t) => t.id === id ? { ...t, completed: !t.completed } : t));
+        try {
+          await apiFetch(`/api/todos/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ completed: !todo.completed }),
+          });
+        } catch (e) {
+          setTodos((prev) => prev.map((t) => t.id === id ? { ...t, completed: todo.completed } : t));
+          if (e.status === 401) onLogout();
+        }
+      };
+
+      const deleteTodo = async (id) => {
+        setTodos((prev) => prev.filter((t) => t.id !== id));
+        try {
+          await apiFetch(`/api/todos/${id}`, { method: 'DELETE' });
+        } catch (e) {
+          if (e.status === 401) onLogout();
+          else setError(e.message);
+        }
+      };
+
+      const clearCompleted = async () => {
+        setTodos((prev) => prev.filter((t) => !t.completed));
+        try {
+          await apiFetch('/api/todos/completed', { method: 'DELETE' });
+        } catch (e) {
+          if (e.status === 401) onLogout();
+          else setError(e.message);
+        }
+      };
+
+      const filtered = useMemo(() => {
+        if (filter === 'active') return todos.filter((t) => !t.completed);
+        if (filter === 'completed') return todos.filter((t) => t.completed);
+        return todos;
+      }, [todos, filter]);
+
+      const remaining = todos.filter((t) => !t.completed).length;
+      const hasCompleted = todos.some((t) => t.completed);
+      const displayName = user.name || user.email;
+
+      return (
+        <main className="min-h-screen w-full flex items-start md:items-center justify-center px-6 py-16 md:py-24">
+          <section className="w-full max-w-xl">
+            {/* Top bar */}
+            <div className="flex items-center justify-between mb-8 brutal-card p-4">
+              <div>
+                <span className="label-tag accent">
+                  {user.role === 'super_admin' ? 'SUPER ADMIN' : user.role === 'admin' ? 'ADMIN' : 'USER'}
+                </span>
+                <p className="text-base mt-2" style={{ fontWeight: 700 }}>{displayName}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {(user.role === 'super_admin' || user.role === 'admin') && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('#/admin')}
+                    className="brutal-btn ghost"
+                  >
+                    관리자
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="brutal-btn ghost"
+                >
+                  로그아웃
+                </button>
+              </div>
+            </div>
+
+            {/* Header */}
+            <header className="mb-8 brutal-card p-6" style={{ background: 'var(--accent-soft)' }}>
+              <span className="label-tag mb-3">TODAY · {new Date().toLocaleDateString('ko-KR')}</span>
+              <h1 className="text-4xl md:text-5xl mt-2">
+                TO·DO LIST
+              </h1>
+              <p className="mt-3 text-sm" style={{ fontWeight: 700 }}>
+                ▸ 오늘 하루, 하나씩 부숴버리자.
+              </p>
+            </header>
+
+            {/* Input */}
+            <div className="flex items-stretch gap-3 mb-8">
+              <input
+                ref={inputRef}
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addTodo(); }}
+                placeholder="무엇을 하고 싶으세요?"
+                aria-label="할 일 입력"
+                className="brutal-input caret-accent flex-1"
+              />
+              <button
+                type="button"
+                onClick={addTodo}
+                disabled={!draft.trim()}
+                className="brutal-btn warn shrink-0"
+              >
+                + 추가
+              </button>
+            </div>
+
+            {/* List */}
+            {loading ? (
+              <div className="py-16 text-center ink-soft text-sm">불러오는 중…</div>
+            ) : error ? (
+              <div className="py-8 text-center text-danger text-sm">{error}</div>
+            ) : filtered.length > 0 ? (
+              <ul className="list-none p-0 m-0">
+                {filtered.map((todo) => (
+                  <TodoItem
+                    key={todo.id}
+                    todo={todo}
+                    onToggle={toggleTodo}
+                    onDelete={deleteTodo}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <div className="py-16 text-center ink-soft text-sm">
+                {filter === 'completed'
+                  ? '아직 완료한 일이 없어요.'
+                  : filter === 'active'
+                  ? '모두 끝냈어요. 잠시 쉬어가요.'
+                  : '할 일을 추가해 하루를 시작해 보세요.'}
+              </div>
+            )}
+
+            {/* Footer */}
+            <footer className="mt-8 brutal-card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <p className="text-sm" style={{ fontWeight: 700 }}>
+                남은 할 일{' '}
+                <span className="label-tag accent" style={{ marginLeft: 4 }}>{remaining}</span>
+              </p>
+
+              <nav className="flex items-center gap-2 flex-wrap">
+                {Object.entries(FILTERS).map(([key, label]) => (
+                  <FilterTab
+                    key={key}
+                    active={filter === key}
+                    onClick={() => setFilter(key)}
+                  >
+                    {label}
+                  </FilterTab>
+                ))}
+              </nav>
+
+              <button
+                type="button"
+                onClick={clearCompleted}
+                disabled={!hasCompleted}
+                className="brutal-btn danger"
+              >
+                완료 비우기
+              </button>
+            </footer>
+          </section>
+        </main>
+      );
+    }
+
+    // ========================================
+    // App (auth gate)
+    // ========================================
+    function App() {
+      const [user, setUser] = useState(null);
+      const [booting, setBooting] = useState(true);
+      const [route, setRoute] = useState(window.location.hash || '#/');
+
+      useEffect(() => {
+        const onHashChange = () => setRoute(window.location.hash || '#/');
+        window.addEventListener('hashchange', onHashChange);
+        return () => window.removeEventListener('hashchange', onHashChange);
+      }, []);
+
+      useEffect(() => {
+        const token = getToken();
+        if (!token) { setBooting(false); return; }
+        apiFetch('/api/me')
+          .then(setUser)
+          .catch(() => setToken(null))
+          .finally(() => setBooting(false));
+      }, []);
+
+      const navigate = (hash) => {
+        window.location.hash = hash;
+      };
+
+      const handleLogout = () => {
+        setToken(null);
+        setUser(null);
+        navigate('#/');
+      };
+
+      if (booting) {
+        return (
+          <div className="min-h-screen flex items-center justify-center ink-soft text-sm">
+            불러오는 중…
+          </div>
+        );
+      }
+
+      if (!user) return <AuthPage onAuth={setUser} />;
+
+      const isAdminRoute = route.startsWith('#/admin');
+      const canAdmin = user.role === 'super_admin' || user.role === 'admin';
+
+      if (isAdminRoute) {
+        if (!canAdmin) {
+          return (
+            <main className="min-h-screen w-full flex items-center justify-center px-6">
+              <div className="max-w-sm text-center">
+                <p className="text-xs tracking-[0.25em] ink-soft uppercase mb-3">Forbidden</p>
+                <h1 className="text-2xl font-light ink tracking-tight mb-4">접근 권한이 없습니다</h1>
+                <button
+                  type="button"
+                  onClick={() => navigate('#/')}
+                  className="text-sm ink-soft hover:text-accent transition-colors"
+                >
+                  할 일로 돌아가기
+                </button>
+              </div>
+            </main>
+          );
+        }
+        return <AdminPage user={user} onLogout={handleLogout} onNavigate={navigate} />;
+      }
+
+      return <TodoPage user={user} onLogout={handleLogout} onNavigate={navigate} />;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "todo-app-01",
+  "version": "1.0.0",
+  "description": "미니멀 할 일 앱",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.11.3"
+  }
+}
