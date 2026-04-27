@@ -1,7 +1,7 @@
 {
-  "name": "account-book-week6",
+  "name": "accuyn-book2",
   "version": "1.0.0",
-  "description": "Korean account book (가계부) backend with Supabase Postgres",
+  "description": "Korean account book (가계부) UI review with Supabase Postgres",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

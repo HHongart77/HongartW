@@ -1,12 +1,12 @@
-// Week6 Account Book — Express + Supabase Postgres
+// accuyn_book2 — Express + Supabase Postgres (가계부 UI review backend)
 // Dual-mode: local `node server.js` + Vercel serverless export
 //
-// Schema (see migrate.js):
-//   categories(id, name, type, emoji, sort_order, created_at)  UNIQUE(name, type)
-//   transactions(id, type, amount, category_id, date, memo, created_at)
+// Schema: a single flat table `accuyn_book2_transactions`
+//   (id, type, amount, category, date, memo, created_at)
 //
-// API surface kept stable: client sends/receives `category` as a string (the name).
-// The server resolves name <-> id against the `categories` table.
+// Note: this project intentionally uses its own table name to avoid colliding
+// with sibling `week6/account_book` which writes to `transactions` /
+// `categories` on the same Supabase database.
 
 try { require('dotenv').config(); } catch (_e) { /* dotenv optional in prod */ }
 
@@ -16,6 +16,7 @@ const { Pool } = require('pg');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const TABLE = 'accuyn_book2_transactions';
 
 // ---------- DB pool ----------
 const connectionString = (process.env.DATABASE_URL || '').trim();
@@ -44,31 +45,11 @@ function normalizeRow(row) {
     id: row.id,
     type: row.type,
     amount: Number(row.amount),
-    category: row.category, // category name (from JOIN)
+    category: row.category,
     date: row.date,
     memo: row.memo,
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
   };
-}
-
-// Resolve a (name, type) pair to a category id, auto-creating the row if missing.
-// Returns the integer id.
-async function resolveCategoryId(client, name, type) {
-  const trimmed = name.trim();
-  const sel = await client.query(
-    `SELECT id FROM categories WHERE name = $1 AND type = $2`,
-    [trimmed, type]
-  );
-  if (sel.rows.length > 0) return sel.rows[0].id;
-
-  const ins = await client.query(
-    `INSERT INTO categories (name, type, sort_order)
-     VALUES ($1, $2, 50)
-     ON CONFLICT (name, type) DO UPDATE SET sort_order = categories.sort_order
-     RETURNING id`,
-    [trimmed, type]
-  );
-  return ins.rows[0].id;
 }
 
 // ---------- Lazy DB init ----------
@@ -77,57 +58,46 @@ let dbInitialized = false;
 async function initDB() {
   if (dbInitialized) return;
 
-  // Idempotent — these match what migrate.js produces, so a fresh checkout
-  // can boot without a separate migration step.
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS categories (
+    CREATE TABLE IF NOT EXISTS ${TABLE} (
       id         SERIAL PRIMARY KEY,
-      name       TEXT NOT NULL,
       type       TEXT NOT NULL CHECK (type IN ('income','expense')),
-      emoji      TEXT,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (name, type)
+      amount     NUMERIC(14,2) NOT NULL CHECK (amount > 0),
+      category   TEXT NOT NULL,
+      date       DATE NOT NULL,
+      memo       TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      id          SERIAL PRIMARY KEY,
-      type        TEXT NOT NULL CHECK (type IN ('income','expense')),
-      amount      NUMERIC(14,2) NOT NULL CHECK (amount > 0),
-      category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
-      date        DATE NOT NULL,
-      memo        TEXT,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_${TABLE}_date ON ${TABLE} (date DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_${TABLE}_type_date ON ${TABLE} (type, date)`);
 
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions (date DESC)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transactions_type_date ON transactions (type, date)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions (category_id)`);
-
-  // Seed default categories if categories is empty
-  const { rows: catCount } = await pool.query('SELECT COUNT(*)::int AS n FROM categories');
-  if (catCount[0].n === 0) {
-    const seedCats = [
-      ['식비', 'expense', '🍚', 1],
-      ['교통', 'expense', '🚌', 2],
-      ['쇼핑', 'expense', '🛍️', 3],
-      ['문화생활', 'expense', '🎬', 4],
-      ['주거', 'expense', '🏠', 5],
-      ['의료', 'expense', '💊', 6],
-      ['기타', 'expense', '🗂️', 99],
-      ['급여', 'income', '💼', 1],
-      ['용돈', 'income', '💝', 2],
-      ['기타', 'income', '💰', 99],
+  // Seed if empty — same fixtures the static client.html shipped with so the
+  // first server-rendered view matches what the user already saw.
+  const { rows: countRows } = await pool.query(`SELECT COUNT(*)::int AS n FROM ${TABLE}`);
+  if (countRows[0].n === 0) {
+    const seed = [
+      ['income',  3200000, '급여',     '2026-04-25', '4월 급여'],
+      ['expense', 850000,  '주거',     '2026-04-05', '월세'],
+      ['expense', 98000,   '식비',     '2026-04-08', '주간 장보기'],
+      ['expense', 32000,   '교통',     '2026-04-11', '택시 + 버스'],
+      ['expense', 125000,  '쇼핑',     '2026-04-14', '봄 옷'],
+      ['expense', 28000,   '의료',     '2026-04-17', '병원'],
+      ['expense', 15000,   '기타',     '2026-04-19', '편의점'],
+      ['expense', 20000,   '문화생활', '2026-04-22', '메가박스'],
+      ['expense', 6500,    '식비',     '2026-04-23', '스타벅스'],
+      ['expense', 12000,   '식비',     '2026-04-24', '김치찌개'],
+      ['income',  50000,   '용돈',     '2026-04-10', '부모님'],
+      ['income',  3200000, '급여',     '2026-03-25', '3월 급여'],
+      ['expense', 180000,  '식비',     '2026-03-12', '장보기'],
+      ['expense', 42000,   '문화생활', '2026-03-22', '영화+카페'],
     ];
-    for (const [name, type, emoji, sort] of seedCats) {
+    for (const [type, amount, category, date, memo] of seed) {
       await pool.query(
-        `INSERT INTO categories (name, type, emoji, sort_order)
-         VALUES ($1,$2,$3,$4)
-         ON CONFLICT (name, type) DO NOTHING`,
-        [name, type, emoji, sort]
+        `INSERT INTO ${TABLE} (type, amount, category, date, memo)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [type, amount, category, date, memo]
       );
     }
   }
@@ -151,30 +121,14 @@ app.use('/api', async (_req, res, next) => {
 
 // ---------- Routes ----------
 
-// GET /api/categories — useful for the client to populate dropdowns
-app.get('/api/categories', async (_req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT id, name, type, emoji, sort_order
-         FROM categories
-        ORDER BY type, sort_order, name`
-    );
-    res.json({ success: true, data: rows });
-  } catch (err) {
-    console.error('[GET /api/categories]', err);
-    res.status(500).json({ success: false, message: 'Failed to fetch categories' });
-  }
-});
-
 // GET /api/transactions
 app.get('/api/transactions', async (_req, res) => {
   try {
-    const { rows } = await pool.query(`
-      SELECT t.id, t.type, t.amount, c.name AS category, t.date, t.memo, t.created_at
-        FROM transactions t
-        JOIN categories c ON c.id = t.category_id
-       ORDER BY t.date DESC, t.id DESC
-    `);
+    const { rows } = await pool.query(
+      `SELECT id, type, amount, category, date, memo, created_at
+         FROM ${TABLE}
+        ORDER BY date DESC, id DESC`
+    );
     res.json({ success: true, data: rows.map(normalizeRow) });
   } catch (err) {
     console.error('[GET /api/transactions]', err);
@@ -184,7 +138,6 @@ app.get('/api/transactions', async (_req, res) => {
 
 // POST /api/transactions
 app.post('/api/transactions', async (req, res) => {
-  const client = await pool.connect();
   try {
     const { type, amount, category, date, memo } = req.body || {};
 
@@ -203,29 +156,16 @@ app.post('/api/transactions', async (req, res) => {
     }
     const memoVal = typeof memo === 'string' && memo.trim() !== '' ? memo.trim() : null;
 
-    await client.query('BEGIN');
-    const categoryId = await resolveCategoryId(client, category, type);
-    const ins = await client.query(
-      `INSERT INTO transactions (type, amount, category_id, date, memo)
+    const { rows } = await pool.query(
+      `INSERT INTO ${TABLE} (type, amount, category, date, memo)
        VALUES ($1,$2,$3,$4,$5)
-       RETURNING id`,
-      [type, amt, categoryId, date, memoVal]
+       RETURNING id, type, amount, category, date, memo, created_at`,
+      [type, amt, category.trim(), date, memoVal]
     );
-    const { rows } = await client.query(
-      `SELECT t.id, t.type, t.amount, c.name AS category, t.date, t.memo, t.created_at
-         FROM transactions t
-         JOIN categories c ON c.id = t.category_id
-        WHERE t.id = $1`,
-      [ins.rows[0].id]
-    );
-    await client.query('COMMIT');
     res.status(201).json({ success: true, data: normalizeRow(rows[0]) });
   } catch (err) {
-    try { await client.query('ROLLBACK'); } catch (_e) {}
     console.error('[POST /api/transactions]', err);
     res.status(500).json({ success: false, message: 'Failed to create transaction' });
-  } finally {
-    client.release();
   }
 });
 
@@ -236,7 +176,7 @@ app.delete('/api/transactions/:id', async (req, res) => {
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ success: false, message: 'invalid id' });
     }
-    const { rowCount } = await pool.query('DELETE FROM transactions WHERE id = $1', [id]);
+    const { rowCount } = await pool.query(`DELETE FROM ${TABLE} WHERE id = $1`, [id]);
     if (rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Transaction not found' });
     }
@@ -261,10 +201,9 @@ app.get('/api/summary', async (req, res) => {
     const end = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
 
     const { rows } = await pool.query(
-      `SELECT t.type, c.name AS category, t.amount
-         FROM transactions t
-         JOIN categories c ON c.id = t.category_id
-        WHERE t.date >= $1 AND t.date < $2`,
+      `SELECT type, category, amount
+         FROM ${TABLE}
+        WHERE date >= $1 AND date < $2`,
       [start, end]
     );
 
@@ -304,7 +243,7 @@ app.use((err, _req, res, _next) => {
 // ---------- Dual-mode export ----------
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`Account Book server running on http://localhost:${PORT}`);
+    console.log(`accuyn_book2 server running on http://localhost:${PORT}`);
   });
 }
 
